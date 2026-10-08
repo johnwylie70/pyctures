@@ -21,11 +21,12 @@ def main(argv=None):
     run.add_argument("--host", default="127.0.0.1", help="address to listen on (default 127.0.0.1)")
     run.add_argument("--no-browser", action="store_true", help="do not open a browser")
 
-    build = sub.add_parser("build", help="write a static folder that runs the scene in any browser",
+    build = sub.add_parser("build", help="write a static folder, or one .html file, that runs the scene in any browser",
                            description="Write a static folder that runs the scene entirely in the "
-                                       "browser, with Pyodide. Put it on any static host.")
+                                       "browser, with Pyodide. Put it on any static host. Give an "
+                                       "output ending in .html for one self-contained file.")
     build.add_argument("path", help="a .py scene, or a folder (for example a web page with scenes in it)")
-    build.add_argument("-o", "--out", default="site", help="output folder (default: site)")
+    build.add_argument("-o", "--out", default="site", help="output folder (default: site), or a .html file for one self-contained file")
     build.add_argument("--add", action="append", default=[], metavar="FILE",
                        help="a file or folder the scene opens or imports (repeatable)")
     build.add_argument("--title", default=None, help="the page title")

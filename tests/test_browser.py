@@ -65,7 +65,11 @@ class Watched:
         end = time.time() + timeout
         while time.time() < end:
             states = [s.get_attribute("data-pyctures-status") for s in self.scenes()]
-            if len(states) == count and all(s in ("running", "finished", "error") for s in states):
+            # Running, and its first frame is on screen (Python may still be
+            # loading while the status already says running).
+            shown = [s.evaluate("(el) => !!(el.pycturesScene && el.pycturesScene.r.shown > 0)") for s in self.scenes()]
+            if len(states) == count and all(s in ("finished", "error") or (s == "running" and f)
+                                            for s, f in zip(states, shown)):
                 return states
             self.page.wait_for_timeout(200)
         raise AssertionError("scenes did not start: %s" % states)
@@ -233,7 +237,8 @@ def test_build_in_an_iframe(browser, static_server, tmp_path):
     end = time.time() + 60
     while time.time() < end:
         status = frame.locator("[data-pyctures-src]").get_attribute("data-pyctures-status")
-        if status == "running":
+        drawn = frame.locator("[data-pyctures-src]").evaluate("(el) => !!(el.pycturesScene && el.pycturesScene.r.shown > 0)")
+        if status == "running" and drawn:
             break
         w.page.wait_for_timeout(300)
     assert status == "running"

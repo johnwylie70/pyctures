@@ -40,10 +40,10 @@ while True:
 
 Or use `update()` and `draw()`, which can never freeze the canvas this way.
 
-If a program does get stuck, the canvas stays blank or stops changing (when `draw()` or `update()` is the one stuck, the page also says so after three seconds). To free it:
+If a program does get stuck, the canvas stays blank or stops changing, and after three seconds the page says so. To free it:
 
 - **With `pyctures run`**, add the missing `await frame()` and save: the stuck Python is stopped and the scene runs again. `Ctrl+C` in the terminal stops everything.
-- **In a built page**, Python runs inside the browser tab, so a loop that never waits holds the whole tab. Close or reload the tab, then fix the loop.
+- **In a built page**, Python runs in a background thread, so the page itself keeps working. Press **Stop** on the message, fix the loop, and build again.
 
 ## When the canvas changes size
 

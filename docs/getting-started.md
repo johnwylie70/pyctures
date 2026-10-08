@@ -80,11 +80,26 @@ Put the folder on any static web host, or try it on your own computer:
 python -m http.server --directory site
 ```
 
-In a built folder, Python runs inside the browser with [Pyodide](https://pyodide.org), which is loaded from its official CDN (`cdn.jsdelivr.net/pyodide`) the first time the page opens. That first load takes a few seconds; after that the browser keeps it. Libraries the scene imports, such as numpy, are loaded from the same place when the scene needs them. Every path in the folder is relative, so it works wherever you put it.
+### One file
+
+Give an output ending in `.html` and you get a single file instead of a folder:
+
+```bash
+pyctures build hello.py -o hello.html
+```
+
+The file holds your scene, the browser half of Pyctures and, only if the scene is 3D, three.js. A 2D scene comes to about 80 KB, a 3D one about 850 KB. Open it straight from your disk with a double-click, send it to someone, or upload it anywhere that takes a web page. Files added with `--add` go inside it too.
+
+### What runs where
+
+In a built page, Python runs inside the browser with [Pyodide](https://pyodide.org), which is loaded from its official CDN (`cdn.jsdelivr.net/pyodide`) the first time the page opens. That first load takes a few seconds; after that the browser keeps it. Libraries the scene imports, such as numpy, are loaded from the same place when the scene needs them. Every path in the folder is relative, so it works wherever you put it.
+
+Python runs in a Web Worker, a background thread of the browser, and the page's own thread only draws. Each screen refresh shows one frame, from a queue of at most two, and the game's clock moves on by exactly one refresh per frame. So motion stays even on a phone or tablet, even when a frame of Python is slow now and then. Add `?measure=1` to the page's address to see how it is doing ([The frame rate](finding-mistakes.md#the-frame-rate)).
 
 | Option | What it does |
 |---|---|
 | `-o site/` | The folder to write (default `site`). Files of the same name in it are replaced; nothing else is removed. |
+| `-o game.html` | Write one self-contained `.html` file instead of a folder. |
 | `--add data.csv` | Also copy a file or folder the scene opens or imports. Repeat it for more. |
 | `--title "My game"` | The page's title. |
 

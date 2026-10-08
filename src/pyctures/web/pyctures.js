@@ -3,7 +3,8 @@
  *
  * One file, used three ways:
  *   - `pyctures run`    the page talks to your own Python over a WebSocket
- *   - `pyctures build`  the page runs Python itself, with Pyodide
+ *   - `pyctures build`  the page runs Python itself, with Pyodide, in a Web
+ *                       Worker (a folder, or one self-contained .html file)
  *   - on any web page   `<div data-pyctures-src="scene.py"></div>` plus
  *                       `<script type="module" src=".../pyctures.js"></script>`
  *
@@ -11,6 +12,10 @@
  * commands the Python half (`pyctures/__init__.py`) records, answers reads, and
  * reports input. Fixed handles (they must match the Python half): 1 window,
  * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons.
+ *
+ * THE PAGE'S MAIN THREAD only draws: Python runs in your own Python (`run`) or
+ * in a worker (`build`), so a slow frame, Python's garbage collection or a
+ * stuck loop never holds up drawing or input.
  *
  * THE HOST LOOP owns requestAnimationFrame. Each refresh, if Python is free and
  * fewer than two frames are waiting to be shown, it asks Python for the next
@@ -46,7 +51,8 @@ function prop(obj, name) {
 
 /**
  * The renderer for one canvas. `hooks`: onEvent(event), onSize(size),
- * onApplied({reads, errors, ms, n, timing}), isActive() (has the keyboard).
+ * onApplied({reads, errors, ms, n, timing}), onReads(reads) (a promise has
+ * settled), isActive() (has the keyboard).
  */
 export function createRenderer(canvas, { three = null, addons = null, hooks }) {
   const H = new Map()
@@ -213,7 +219,12 @@ export function createRenderer(canvas, { three = null, addons = null, hooks }) {
           case 'fcall': { const f = lookup(c[3]); const r = f.apply(null, decode(c[4])); if (c[2]) H.set(c[2], r); break }
           case 'fnew': { const F = lookup(c[3]); const m = Reflect.construct(F, decode(c[4])); if (c[2]) H.set(c[2], m); break }
           case 'free': H.delete(c[2]); break
-          case 'read': reads[c[2]] = summarize(decode(c[3])); break
+          case 'read': {
+            const val = decode(c[3])
+            if (val && typeof val.then === 'function') settle(val, c[2], c[4], c[1])
+            else reads[c[2]] = summarize(val)
+            break
+          }
         }
       } catch (e) {
         const msg = (e && e.message) || String(e)
@@ -223,6 +234,21 @@ export function createRenderer(canvas, { three = null, addons = null, hooks }) {
       }
     }
     hooks.onApplied({ reads, errors, ms: performance.now() - started, n: cmds.length, timing })
+  }
+
+  // A PROMISE is answered when it settles, in a later frame. An object result
+  // (a GPU adapter, a device) is kept under the handle Python reserved.
+  function settle(promise, rid, newH, line) {
+    promise.then((res) => {
+      const plain = res === null || res === undefined || typeof res !== 'object' || Array.isArray(res) ||
+        ArrayBuffer.isView(res) || Object.getPrototypeOf(res) === Object.prototype
+      let answer
+      if (plain || !newH) answer = summarize(res)
+      else { H.set(newH, res); answer = { $h: newH } }
+      if (hooks.onReads) hooks.onReads({ [rid]: answer })
+    }, (e) => {
+      if (hooks.onReads) hooks.onReads({ [rid]: { $error: 'line ' + line + ': ' + ((e && e.message) || String(e)) } })
+    })
   }
 
   // three.js sizes the canvas itself: stop scaling it for 2D.
@@ -297,6 +323,8 @@ export function createRenderer(canvas, { three = null, addons = null, hooks }) {
       if (!scheduled) { scheduled = true; requestAnimationFrame(present) }
     },
     get size() { return { width: cssW, height: cssH, pixel_ratio: dpr } },
+    /** Frames waiting for a refresh. */
+    get waiting() { return pending.length },
     destroy() {
       observer.disconnect()
       window.removeEventListener('keydown', sendInput)
@@ -308,16 +336,43 @@ export function createRenderer(canvas, { three = null, addons = null, hooks }) {
   }
 }
 
-// ---------------------------------------------------------------- three.js
+// ---------------------------------------------------------------- a single-file page
+//
+// `pyctures build scene.py -o scene.html` writes one HTML file. What a folder
+// would hold beside the page comes inside it instead, as JSON in
+// <script type="application/json" id="pyctures-inline">:
+//   {runtime, sources: {path: text}, files: {path: base64}, three: {core, module, orbit}}
+
+let inlineData
+function inline() {
+  if (inlineData === undefined) {
+    inlineData = null
+    try {
+      const el = typeof document !== 'undefined' && document.getElementById('pyctures-inline')
+      if (el) inlineData = JSON.parse(el.textContent)
+    } catch (e) { /* not a single-file page */ }
+  }
+  return inlineData
+}
 
 let threePromise = null
-/** three.js and OrbitControls, from the folder beside this file. */
+/** three.js and OrbitControls: from inside a single-file page, or the folder beside this file. */
 function loadThree() {
   if (!threePromise) {
-    threePromise = Promise.all([
-      import(new URL('three/three.module.min.js', BASE).href),
-      import(new URL('three/OrbitControls.js', BASE).href),
-    ]).then((m) => ({ three: m[0], addons: { OrbitControls: m[1].OrbitControls } }))
+    const inl = inline()
+    let urls
+    if (inl && inl.three) {
+      // Each module becomes a Blob URL, and the one it imports is pointed at it.
+      const blob = (text) => URL.createObjectURL(new Blob([text], { type: 'text/javascript' }))
+      const core = blob(inl.three.core)
+      const mod = blob(inl.three.module.split('"./three.core.min.js"').join(JSON.stringify(core)))
+      const orbit = blob(inl.three.orbit.split("'./three.module.min.js'").join(JSON.stringify(mod)))
+      urls = [mod, orbit]
+    } else {
+      urls = [new URL('three/three.module.min.js', BASE).href, new URL('three/OrbitControls.js', BASE).href]
+    }
+    threePromise = Promise.all(urls.map((u) => import(u)))
+      .then((m) => ({ three: m[0], addons: { OrbitControls: m[1].OrbitControls } }))
   }
   return threePromise
 }
@@ -372,25 +427,10 @@ export function websocketTransport(src) {
   }
 }
 
-let pyodidePromise = null
-let nextSceneId = 1
-/** Pyodide, loaded once per page and shared by every scene on it. */
-function loadPyodideOnce() {
-  if (!pyodidePromise) {
-    const base = (window.PYCTURES_PYODIDE_URL || PYODIDE_URL).replace(/\/?$/, '/')
-    pyodidePromise = (async () => {
-      const [{ loadPyodide }, runtime] = await Promise.all([
-        import(base + 'pyodide.mjs'),
-        fetch(new URL('pyctures.py', BASE)).then((r) => {
-          if (!r.ok) throw new Error('pyctures.py was not found beside pyctures.js')
-          return r.text()
-        }),
-      ])
-      const py = await loadPyodide({ indexURL: base })
-      // Every scene gets its own copy of the module, and is made the module
-      // `pyctures` for the length of each call, so scenes cannot see each other.
-      py.globals.set('__pyctures_source', runtime)
-      py.runPython(`
+// The Python that hosts scenes in Pyodide: every scene gets its own copy of
+// the module, and is made the module `pyctures` for the length of each call,
+// so scenes cannot see each other.
+const PY_HOST = `
 import sys, types
 _pyctures_scenes = {}
 def _pyctures_new(sid):
@@ -408,14 +448,201 @@ def _pyctures_call(sid, op, a=None, b=None):
     m.stop()
     _pyctures_scenes.pop(sid, None)
     return 'stopped'
-`)
+`
+
+function pyodideBase() {
+  const url = (typeof window !== 'undefined' && window.PYCTURES_PYODIDE_URL) || PYODIDE_URL
+  return new URL(url.replace(/\/?$/, '/'), location.href).href
+}
+
+let runtimePromise = null
+/** The Python half's source: from a single-file page, or pyctures.py beside this file. */
+function loadRuntime() {
+  if (!runtimePromise) {
+    const inl = inline()
+    runtimePromise = inl && inl.runtime
+      ? Promise.resolve(inl.runtime)
+      : fetch(new URL('pyctures.py', BASE)).then((r) => {
+        if (!r.ok) throw new Error('pyctures.py was not found beside pyctures.js')
+        return r.text()
+      })
+    runtimePromise.catch(() => { runtimePromise = null })
+  }
+  return runtimePromise
+}
+
+/** The files a scene opens, as [{path, data}], from a single-file page or beside the scene. */
+async function readFiles(src, files) {
+  const inl = inline()
+  const out = []
+  for (const f of files) {
+    const path = f.split('/').filter((p) => p && p !== '.').join('/')
+    let data
+    if (inl && inl.files && inl.files[f] != null) {
+      const bin = atob(inl.files[f])
+      const bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      data = bytes.buffer
+    } else {
+      const res = await fetch(new URL(f, new URL(src, location.href)))
+      if (!res.ok) throw new Error(`Could not load ${f} (${res.status})`)
+      data = await res.arrayBuffer()
+    }
+    out.push({ path, data })
+  }
+  return out
+}
+
+/**
+ * THE WORKER. Python runs here, off the page's main thread, so a slow frame,
+ * Python's garbage collection or a loop that never waits cannot hold up
+ * drawing, scrolling or input. It only ever turns a request into a reply
+ * (the same JSON the other transports give). This function is the worker's
+ * whole code: it is turned into a Blob URL, so a page needs no extra file.
+ */
+function workerMain() {
+  let py = null, booting = null, call = null
+  async function boot(m) {
+    importScripts(m.pyodide + 'pyodide.js')
+    // eslint-disable-next-line no-undef
+    py = await loadPyodide({ indexURL: m.pyodide })
+    py.globals.set('__pyctures_source', m.runtime)
+    py.runPython(m.host)
+    call = py.globals.get('_pyctures_call')
+  }
+  function writeFiles(files) {
+    for (const f of files || []) {
+      const parts = f.path.split('/')
+      for (let i = 1; i < parts.length; i++) {
+        try { py.FS.mkdir(parts.slice(0, i).join('/')) } catch (e) { /* exists */ }
+      }
+      py.FS.writeFile(f.path, new Uint8Array(f.data))
+    }
+  }
+  self.onmessage = async (ev) => {
+    const m = ev.data
+    if (m.type === 'boot') { booting = boot(m); booting.catch(() => {}); return }
+    let reply = null, error = null
+    try {
+      try { await booting } catch (e) { throw new Error('Python could not load: ' + ((e && e.message) || e)) }
+      if (m.op === 'start') {
+        writeFiles(m.files)
+        await py.loadPackagesFromImports(m.source)
+        py.globals.get('_pyctures_new')(m.sid)
+        reply = call(m.sid, 'start', m.source, m.info)
+      } else if (m.op === 'tick') {
+        reply = call(m.sid, 'tick', m.payload)
+      } else {
+        reply = call(m.sid, 'stop')
+      }
+    } catch (e) {
+      error = String((e && e.message) || e)
+    }
+    self.postMessage({ id: m.id, reply, error })
+  }
+}
+
+let pyWorker = null
+/**
+ * The page's Python worker, started on first use and shared by every scene on
+ * the page (one copy of Python). terminate() ends it, for a scene stuck in a
+ * loop: every call still waiting is answered with an error marked
+ * `restarted`, and the next call starts a fresh worker.
+ */
+function pythonWorker() {
+  if (pyWorker && !pyWorker.dead) return pyWorker
+  const url = URL.createObjectURL(new Blob(['(' + workerMain.toString() + ')()'], { type: 'text/javascript' }))
+  const w = new Worker(url)
+  const waiting = new Map()
+  let nextId = 1
+  const me = { dead: null }
+  const fail = (why) => {
+    for (const p of waiting.values()) { const e = new Error(why); e.restarted = true; p.reject(e) }
+    waiting.clear()
+  }
+  w.onmessage = (ev) => {
+    const m = ev.data
+    const p = waiting.get(m.id)
+    if (!p) return
+    waiting.delete(m.id)
+    if (m.error != null) p.reject(new Error(m.error))
+    else p.resolve(m.reply)
+  }
+  w.onerror = (ev) => {
+    ev.preventDefault()
+    for (const p of waiting.values()) p.reject(new Error('Python stopped: ' + (ev.message || 'the worker failed')))
+    waiting.clear()
+  }
+  const booted = Promise.all([loadRuntime(), pyodideBase()]).then(([runtime, base]) => {
+    w.postMessage({ type: 'boot', pyodide: base, runtime, host: PY_HOST })
+  })
+  me.call = async (msg, transfer) => {
+    await booted
+    if (me.dead) { const e = new Error(me.dead); e.restarted = true; throw e }
+    return new Promise((resolve, reject) => {
+      const id = nextId++
+      waiting.set(id, { resolve, reject })
+      w.postMessage({ id, ...msg }, transfer || [])
+    })
+  }
+  me.terminate = (why) => {
+    if (me.dead) return
+    me.dead = why || 'Python was restarted'
+    w.terminate()
+    URL.revokeObjectURL(url)
+    fail(me.dead)
+    if (pyWorker === me) pyWorker = null
+  }
+  pyWorker = me
+  return me
+}
+
+let nextSceneId = 1
+
+/**
+ * Python in a Web Worker, with Pyodide: what built pages and scenes on a web
+ * page use. `files`: extra files to put beside the scene.
+ */
+export function workerTransport(src, files = []) {
+  const sid = nextSceneId++
+  let worker = null
+  return {
+    label: 'Python in a worker',
+    async start(source, info) {
+      worker = pythonWorker()
+      const data = await readFiles(src, files)
+      return worker.call({ op: 'start', sid, source, info: JSON.stringify(info), files: data }, data.map((d) => d.data))
+    },
+    tick(payload) { return worker.call({ op: 'tick', sid, payload: JSON.stringify(payload) }) },
+    async stop() {
+      if (worker && !worker.dead) { try { await worker.call({ op: 'stop', sid }) } catch (e) { /* not running */ } }
+    },
+    /** Stop a scene that is stuck in a loop: ends the worker, and Python with it. */
+    hardStop() { if (worker) worker.terminate('Python was restarted') },
+  }
+}
+
+let pyodidePromise = null
+/** Pyodide on the page's own thread, loaded once and shared by every scene on it. */
+function loadPyodideOnce() {
+  if (!pyodidePromise) {
+    const base = pyodideBase()
+    pyodidePromise = (async () => {
+      const [{ loadPyodide }, runtime] = await Promise.all([import(base + 'pyodide.mjs'), loadRuntime()])
+      const py = await loadPyodide({ indexURL: base })
+      py.globals.set('__pyctures_source', runtime)
+      py.runPython(PY_HOST)
       return py
     })()
   }
   return pyodidePromise
 }
 
-/** Python in the page itself, with Pyodide. `files`: extra files to put beside the scene. */
+/**
+ * Python on the page's own thread, with Pyodide: for a browser without
+ * workers, or `data-pyctures-worker="off"`. A slow frame here holds up the
+ * page, so the worker is the better choice wherever it is available.
+ */
 export function pyodideTransport(src, files = []) {
   const sid = nextSceneId++
   let py = null, callPy = null
@@ -424,15 +651,12 @@ export function pyodideTransport(src, files = []) {
     async start(source, info) {
       py = await loadPyodideOnce()
       callPy = py.globals.get('_pyctures_call')
-      for (const f of files) {
-        const url = new URL(f, new URL(src, location.href))
-        const data = new Uint8Array(await (await fetch(url)).arrayBuffer())
-        const parts = f.split('/').filter((p) => p && p !== '.')
+      for (const f of await readFiles(src, files)) {
+        const parts = f.path.split('/')
         for (let i = 1; i < parts.length; i++) {
-          const dir = parts.slice(0, i).join('/')
-          try { py.FS.mkdir(dir) } catch (e) { /* exists */ }
+          try { py.FS.mkdir(parts.slice(0, i).join('/')) } catch (e) { /* exists */ }
         }
-        py.FS.writeFile(parts.join('/'), data)
+        py.FS.writeFile(f.path, new Uint8Array(f.data))
       }
       await py.loadPackagesFromImports(source)
       py.globals.get('_pyctures_new')(sid)
@@ -453,9 +677,11 @@ const STYLE = `
 .pyctures-error h2{margin:0 0 12px;font-size:17px;color:#ff8a8a}
 .pyctures-error pre{margin:0 0 14px;padding:12px;background:#0b0b0f;border-radius:6px;overflow:auto;font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre}
 .pyctures-error .bad{background:#5a1d26;display:inline-block;min-width:100%}
-.pyctures-error button,.pyctures-bar button{font:inherit;background:#2a2f3a;color:#f3f4f6;border:1px solid #3a4150;border-radius:6px;padding:4px 12px;cursor:pointer}
+.pyctures-error button,.pyctures-stuck button{font:inherit;background:#2a2f3a;color:#f3f4f6;border:1px solid #3a4150;border-radius:6px;padding:4px 12px;cursor:pointer}
 .pyctures-output{position:absolute;left:0;right:0;bottom:0;max-height:35%;overflow:auto;margin:0;padding:8px 12px;background:rgba(11,11,15,.88);color:#d1d5db;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
 .pyctures-output .err{color:#ff8a8a}.pyctures-output .info{color:#9aa3b2}
+.pyctures-stuck{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:3;display:flex;gap:12px;align-items:center;max-width:calc(100% - 32px);box-sizing:border-box;padding:10px 14px;border-radius:8px;background:rgba(20,10,14,.92);color:#f3f4f6;font:13px system-ui,sans-serif}
+.pyctures-measure{position:absolute;top:6px;left:6px;z-index:2;margin:0;padding:5px 8px;border-radius:6px;background:rgba(0,0,0,.66);color:#e5e7eb;font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre;pointer-events:none}
 `
 let styled = false
 function addStyle() {
@@ -466,7 +692,8 @@ function addStyle() {
   document.head.appendChild(s)
 }
 
-function measureSwitch() {
+function measureSwitch(el) {
+  if (el && el.hasAttribute('data-pyctures-measure') && el.getAttribute('data-pyctures-measure') !== '0') return true
   try {
     if (new URLSearchParams(location.search).get('measure') === '1') return true
     return localStorage.getItem(MEASURE_KEY) === '1'
@@ -498,7 +725,7 @@ export class Scene {
       sent: 0, shown: 0, clock: 0, period: 1000 / 60, lastRaf: 0, raf: 0,
       events: [], reads: {}, size: { width: 0, height: 0, pixel_ratio: 1 },
       measuring: false, measureSince: 0, lastShown: 0,
-      acc: { frames: 0, shown: 0, missed: 0, cmds: 0, ms: {} },
+      acc: { frames: 0, shown: 0, missed: 0, worst: 0, cmds: 0, ms: {} },
     }
     this.visible = false
     el.classList.add('pyctures-scene')
@@ -603,6 +830,8 @@ export class Scene {
     Object.assign(r, { events: [], reads: {}, busy: false, warnedStuck: false, sent: 0, shown: 0, clock: 0, lastRaf: 0 })
     this.cover('Starting Python…')
     try {
+      const inl = inline()
+      if (this.source == null && inl && inl.sources && inl.sources[this.opt.src] != null) this.source = inl.sources[this.opt.src]
       if (this.source == null) {
         const res = await fetch(this.opt.src, { cache: 'no-store' })
         if (!res.ok) throw new Error(`Could not load ${this.opt.src} (${res.status})`)
@@ -630,15 +859,20 @@ export class Scene {
           onEvent: (e) => { if (r.live) r.events.push(e) },
           onSize: (s) => { r.size = s },
           onApplied: (d) => this.applied(d),
+          onReads: (reads) => { if (r.live) Object.assign(r.reads, reads) },
           isActive: () => activeScene === this,
         },
       })
-      r.measuring = measureSwitch()
+      r.measuring = measureSwitch(this.el)
+      this.watch()
+      r.acc = { frames: 0, shown: 0, missed: 0, worst: 0, cmds: 0, ms: {} }
+      r.lastShown = 0
       r.busy = true
       r.busySince = performance.now()
       this.setStatus('running')
       const text = await this.transport.start(source, { ...r.size, measure: r.measuring })
       r.busy = false
+      if (r.warnedStuck) this.unstuck()
       if (token !== r.token) return
       this.cover('')
       if (this.handleReply(JSON.parse(text), token)) {
@@ -649,6 +883,7 @@ export class Scene {
     } catch (error) {
       if (token !== r.token) return
       r.busy = false
+      if (error && error.restarted) { this.start(); return }   // another scene restarted Python
       this.cover('')
       const msg = String((error && error.message) || error)
       this.log('err', msg)
@@ -659,13 +894,22 @@ export class Scene {
 
   async stop() {
     const r = this.r
+    const wasBusy = r.busy
     r.token++
     r.live = false
     cancelAnimationFrame(r.raf)
+    this.unwatch()
     if (this.status === 'running' || this.status === 'starting') this.setStatus('stopped')
     if (this.renderer) { this.renderer.destroy(); this.renderer = null }
     if (this.transport) {
-      try { await this.transport.stop() } catch (e) { /* best effort */ }
+      // Python in the middle of a frame cannot be asked to stop: a worker is
+      // ended instead (and started afresh on the next run).
+      if (wasBusy && this.transport.hardStop) this.transport.hardStop()
+      else {
+        try {
+          await Promise.race([this.transport.stop(), new Promise((res) => setTimeout(res, 1000))])
+        } catch (e) { /* best effort */ }
+      }
       // A WebSocket transport is one run; make a new one next time.
       if (this.opt.makeTransport) this.transport = null
     }
@@ -678,6 +922,56 @@ export class Scene {
     this.io.disconnect()
     document.removeEventListener('visibilitychange', this.onVisibility)
     if (this.canvas) this.canvas.remove()
+  }
+
+  // THE WATCHDOG. Python runs off the page's thread, so the page can still
+  // notice when a frame (or the file's top level) has not come back for a
+  // few seconds, say why, and offer to stop it.
+  watch() {
+    this.unwatch()
+    this.watchdog = setInterval(() => {
+      const r = this.r
+      if (r.busy && !r.warnedStuck && performance.now() - r.busySince > STUCK_MS) {
+        r.warnedStuck = true
+        this.log('info', 'Python has not finished a frame for 3 seconds. A loop that never awaits frame() holds it.')
+        this.showStuck()
+      }
+    }, 500)
+  }
+
+  unwatch() {
+    clearInterval(this.watchdog)
+    this.watchdog = 0
+    this.unstuck()
+  }
+
+  showStuck() {
+    if (this.stuckEl) return
+    const box = document.createElement('div')
+    box.className = 'pyctures-stuck'
+    const text = document.createElement('span')
+    text.textContent = 'Python has not finished a frame for 3 seconds. Is there a loop that never waits?'
+    const btn = document.createElement('button')
+    btn.textContent = 'Stop'
+    btn.onclick = () => this.halt()
+    box.appendChild(text)
+    box.appendChild(btn)
+    this.stuckEl = box
+    this.el.appendChild(box)
+  }
+
+  unstuck() {
+    this.r.warnedStuck = false
+    if (this.stuckEl) { this.stuckEl.remove(); this.stuckEl = null }
+  }
+
+  /** Stop a scene that is stuck, and say so. */
+  async halt() {
+    await this.stop()
+    const msg = 'Stopped: Python did not finish a frame. A loop that never waits (for example while True: without await frame()) holds it.'
+    this.log('err', msg)
+    this.showError(msg, 0)
+    this.setStatus('error')
   }
 
   resume() {
@@ -766,7 +1060,7 @@ export class Scene {
     this.transport.tick(payload).then((text) => {
       if (token !== r.token) return
       r.busy = false
-      r.warnedStuck = false
+      if (r.warnedStuck) this.unstuck()
       const done = performance.now()
       const parsed = JSON.parse(text)
       if (r.measuring) {
@@ -782,6 +1076,7 @@ export class Scene {
       if (token !== r.token) return
       r.busy = false
       r.live = false
+      if (error && error.restarted) { this.start(); return }   // another scene restarted Python
       const msg = String((error && error.message) || error)
       this.log('err', msg)
       this.showError(msg, 0)
@@ -800,34 +1095,60 @@ export class Scene {
       const delta = now - r.lastRaf
       if (delta > 4 && delta < 40) r.period = r.period * 0.9 + delta * 0.1
     }
+    const gap = r.lastRaf ? now - r.lastRaf : 0
     r.lastRaf = now
-    if (r.measuring) this.measureTick(now)
+    if (r.measuring) this.measureTick(now, gap)
     if (r.busy) {
       r.missedRefresh = true
-      if (!r.warnedStuck && now - r.busySince > STUCK_MS) {
-        r.warnedStuck = true
-        this.log('info', 'Python has not finished a frame for 3 seconds. A loop that never awaits frame() holds it.')
-      }
       return
     }
     this.requestFrame(now)
   }
 
-  // MEASURE MODE: add ?measure=1 to the page's address (or set
-  // localStorage['pyctures:measure'] = '1'). Each second, where the frame
-  // time goes is logged and kept in window.__pycturesMeasure.
-  measureTick(now) {
+  // MEASURE MODE: add ?measure=1 to the page's address, put
+  // data-pyctures-measure on the scene's div, or set
+  // localStorage['pyctures:measure'] = '1'. A box over the scene shows, each
+  // second, the frame rate and where the frame time goes; the same summary is
+  // logged and kept in window.__pycturesMeasure (and scene.measure).
+  //
+  // A MISSED REFRESH is a screen refresh that showed no new frame: either an
+  // animation frame came with nothing new in the queue, or the page was held
+  // so long that whole refreshes went by with no animation frame at all.
+  measureTick(now, gap) {
     const r = this.r, a = r.acc
     if (r.shown === r.lastShown) a.missed++
+    if (gap > r.period * 1.5) a.missed += Math.round(gap / r.period) - 1
+    if (gap > a.worst) a.worst = gap
     r.lastShown = r.shown
     if (now - r.measureSince < 1000) return
     const ms = {}
     for (const k in a.ms) ms[k] = +(a.ms[k] / Math.max(1, k === 'draw_in_page' ? a.shown : a.frames)).toFixed(2)
-    const summary = { scene: this.name, fps: Math.round((a.shown * 1000) / (now - r.measureSince)), ms, commands: Math.round(a.cmds / Math.max(1, a.shown)), queued: r.sent - r.shown, missedRefreshes: a.missed }
+    const summary = {
+      scene: this.name, runtime: (this.transport && this.transport.label) || '',
+      fps: Math.round((a.shown * 1000) / (now - r.measureSince)), ms,
+      commands: Math.round(a.cmds / Math.max(1, a.shown)), queued: r.sent - r.shown, missedRefreshes: a.missed,
+      longestRefresh: +a.worst.toFixed(1),
+    }
+    this.measure = summary
     window.__pycturesMeasure = summary
     console.info('[pyctures measure]', JSON.stringify(summary))
-    r.acc = { frames: 0, shown: 0, missed: 0, cmds: 0, ms: {} }
+    this.showMeasure(summary)
+    r.acc = { frames: 0, shown: 0, missed: 0, worst: 0, cmds: 0, ms: {} }
     r.measureSince = now
+  }
+
+  showMeasure(m) {
+    if (!this.measureEl) {
+      this.measureEl = document.createElement('pre')
+      this.measureEl.className = 'pyctures-measure'
+      this.el.appendChild(this.measureEl)
+    }
+    const f = (v) => (v == null ? '–' : v.toFixed(1))
+    this.measureEl.textContent =
+      `${m.fps} fps   missed ${m.missedRefreshes}   longest ${m.longestRefresh.toFixed(0)} ms\n` +
+      `python ${f(m.ms.python)} ms   round trip ${f(m.ms.round_trip)} ms\n` +
+      `draw ${f(m.ms.draw_in_page)} ms   queued ${m.queued}\n` +
+      m.runtime
   }
 }
 
@@ -845,13 +1166,17 @@ function serverMode() {
  *   data-pyctures-output      "panel" to show print() over the scene
  *   data-pyctures-background  a CSS colour
  *   data-pyctures-fullpage    the scene is the whole page
+ *   data-pyctures-measure     show the measure box (frame rate and timings)
+ *   data-pyctures-worker      "off" runs Python on the page's own thread
  */
 export function mount(el, options = {}) {
   if (el.pycturesScene) return el.pycturesScene
   const src = options.src || el.dataset.pycturesSrc
   const files = options.files || (el.dataset.pycturesFiles || '').split(',').map((s) => s.trim()).filter(Boolean)
   const server = options.server !== undefined ? options.server : serverMode()
-  const make = () => (server ? websocketTransport(src) : pyodideTransport(src, files))
+  const worker = options.worker !== undefined ? options.worker
+    : el.dataset.pycturesWorker !== 'off' && typeof Worker !== 'undefined'
+  const make = () => (server ? websocketTransport(src) : worker ? workerTransport(src, files) : pyodideTransport(src, files))
   const scene = new Scene(el, {
     src,
     fullPage: options.fullPage !== undefined ? options.fullPage : el.hasAttribute('data-pyctures-fullpage'),

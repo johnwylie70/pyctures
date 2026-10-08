@@ -32,7 +32,7 @@ Command shape (the contract with ``web/pyctures.js``). Every command is
   ['fcall',line, newH, fnH, args]
   ['fnew', line, newH, fnH, args]
   ['free', line, h]
-  ['read', line, readId, value]
+  ['read', line, readId, value, newH]   (newH: where a promise's object lands)
 
 Values: plain JSON, or {"$h": h}, {"$e": expr}, {"$cb": id}, {"$d": {...}}.
 
@@ -44,7 +44,7 @@ import sys, io, json, time, math, traceback, threading, types, linecache
 
 __version__ = "0.1.0"
 
-VERSION = "9"
+VERSION = "10"
 USER_FILE = "main.py"
 
 # Fixed handles the frame defines before anything runs.
@@ -127,16 +127,27 @@ _READ_HINT = ("this value lives in the preview, not in Python — "
 
 
 class _Read:
-    """An awaitable for one value the frame has to send back."""
+    """An awaitable for one value the frame has to send back.
+
+    A PROMISE is awaited in the page: what it resolves to comes back as data,
+    or, when it is an object (a GPU adapter, a device, a loaded font), as a
+    reference that can be used like any other. Its handle number is reserved
+    here, with the read, so the two sides never disagree on it.
+    """
     __slots__ = ("rid",)
 
     def __init__(self, encoded):
         self.rid = S.next_read
         S.next_read += 1
-        _emit("read", self.rid, encoded)
+        _emit("read", self.rid, encoded, _new_handle())
 
     def __await__(self):
         result = yield self
+        if isinstance(result, dict) and len(result) == 1:
+            if "$h" in result:
+                return JsRef(result["$h"], owned=True)
+            if "$error" in result:
+                raise RuntimeError(result["$error"])
         return result
 
 

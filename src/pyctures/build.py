@@ -1,9 +1,14 @@
-"""``pyctures build``: a static folder that runs scenes in any browser.
+"""``pyctures build``: a static folder, or one HTML file, that runs scenes in any browser.
 
 The folder holds the scene, an ``index.html`` and a ``pyctures/`` folder
 (the browser half, three.js, and the Python half as ``pyctures.py``). Python
-itself is Pyodide, loaded from its official CDN. Every path is relative, so
-the folder can be put on any static host, or inside an existing site.
+itself is Pyodide, loaded from its official CDN, and runs in a Web Worker so
+the page's own thread only draws. Every path is relative, so the folder can be
+put on any static host, or inside an existing site.
+
+When the output ends in ``.html`` (``-o scene.html``) the result is ONE file
+holding all of that (three.js only when the scene uses it), which also opens
+straight from disk.
 """
 import shutil
 import sys
@@ -27,6 +32,11 @@ def build(target, out, add=(), title=None, say=print):
     out = Path(out).resolve()
     if not target.exists():
         raise SystemExit("pyctures: %s does not exist" % target)
+    if out.suffix.lower() in (".html", ".htm"):
+        if not target.is_file():
+            raise SystemExit("pyctures: a single .html file holds one scene; "
+                             "give a folder for -o to build %s" % target.name)
+        return build_single(target, out, add, title, say)
     out.mkdir(parents=True, exist_ok=True)
     if target.is_file():
         written = _build_scene(target, out, add, title)
@@ -42,13 +52,27 @@ def build(target, out, add=(), title=None, say=print):
     return out
 
 
-def _build_scene(scene, out, add, title):
+def build_single(scene, out, add=(), title=None, say=print):
+    """One self-contained .html file for one scene."""
     if scene.suffix != ".py":
         raise SystemExit("pyctures: %s is not a .py file" % scene.name)
-    written = []
-    shutil.copyfile(scene, out / scene.name)
-    written.append(scene.name)
-    files = []
+    source = scene.read_text(encoding="utf-8")
+    files = {}
+    for rel, path in _added(scene, add):
+        files[rel] = path.read_bytes()
+    three = pages.uses_three(source)
+    page = pages.single_page(title or scene.stem.replace("_", " ").title(), scene.name, source,
+                             files=files, three=three)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(page, encoding="utf-8")
+    say("Built %s (%d KB%s)" % (_short(out), (len(page.encode("utf-8")) + 1023) // 1024,
+                                 ", with three.js" if three else ""))
+    say("One file: open it in a browser, or put it on any website.")
+    return out
+
+
+def _added(scene, add):
+    """(path relative to the scene, file) for every --add file, folders expanded."""
     for extra in add:
         extra = Path(extra).resolve()
         if not extra.exists():
@@ -59,15 +83,33 @@ def _build_scene(scene, out, add, title):
             rel = Path(extra.name)
         if extra.is_dir():
             for f in pages.walk(extra):
-                r = rel / f.relative_to(extra)
-                (out / r).parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(f, out / r)
-                files.append(r.as_posix())
+                yield (rel / f.relative_to(extra)).as_posix(), f
         else:
-            (out / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(extra, out / rel)
-            files.append(rel.as_posix())
-        written.append(rel.as_posix())
+            yield rel.as_posix(), extra
+
+
+def _top_level(scene, add):
+    """What each --add names, relative to the scene (a folder as itself)."""
+    for extra in add:
+        extra = Path(extra).resolve()
+        try:
+            yield extra.relative_to(scene.parent).as_posix()
+        except ValueError:
+            yield extra.name
+
+
+def _build_scene(scene, out, add, title):
+    if scene.suffix != ".py":
+        raise SystemExit("pyctures: %s is not a .py file" % scene.name)
+    written = []
+    shutil.copyfile(scene, out / scene.name)
+    written.append(scene.name)
+    files = []
+    for rel, f in _added(scene, add):
+        (out / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(f, out / rel)
+        files.append(rel)
+    written.extend(dict.fromkeys(_top_level(scene, add)))
     page = pages.scene_page(title or scene.stem.replace("_", " ").title(), scene.name,
                             "pyctures/pyctures.js", files=files)
     (out / "index.html").write_text(page, encoding="utf-8")

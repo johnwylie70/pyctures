@@ -49,6 +49,16 @@ pyctures build hello.py -o site/
 
 `site/` is a folder of plain files that runs the scene entirely in the browser, with [Pyodide](https://pyodide.org) loaded from its official CDN. Put it on any static host. Every path in it is relative.
 
+Or make one file:
+
+```bash
+pyctures build hello.py -o hello.html
+```
+
+`hello.html` holds the scene and everything it needs (three.js too, if the scene is 3D), so you can email it, put it on any website, or open it straight from your disk. Python still loads from Pyodide's CDN.
+
+Either way, Python runs in a background thread of the browser (a Web Worker), and the page only draws. A slow frame or a stuck loop cannot hold up the page, so scenes play smoothly on phones and tablets too. Add `?measure=1` to the address to see the frame rate and where each frame's time goes.
+
 ## Use it on your website
 
 Either put a built scene in an iframe:
@@ -65,7 +75,7 @@ or put scenes straight into your page, as many as you like:
 <script type="module" src="pyctures/pyctures.js"></script>
 ```
 
-Each canvas fills its box, starts when it scrolls into view, and pauses when it is out of view or the tab is hidden. `pyctures build my-page/ -o site/` copies your page and adds the `pyctures/` folder. See [Use it on your website](docs/website.md), and the two-scene page in [`examples/website`](examples/website).
+Each canvas fills its box, starts when it scrolls into view, and pauses when it is out of view or the tab is hidden. All the scenes on a page share one copy of Python, in a background thread. `pyctures build my-page/ -o site/` copies your page and adds the `pyctures/` folder. See [Use it on your website](docs/website.md), and the two-scene page in [`examples/website`](examples/website).
 
 ## Bringing a JavaScript example across
 

@@ -1,0 +1,53 @@
+THIRD-PARTY NOTICES
+
+Pyctures includes or loads the following third-party software.
+
+--------------------------------------------------------------------------------
+three.js (r179, version 0.179.1)
+https://threejs.org  -  https://github.com/mrdoob/three.js
+
+Included in this package as:
+  src/pyctures/web/three/three.module.min.js
+  src/pyctures/web/three/three.core.min.js
+  src/pyctures/web/three/OrbitControls.js
+    (from examples/jsm/controls/OrbitControls.js; its import of 'three' is
+    changed to the relative './three.module.min.js' so it loads without an
+    import map)
+
+Licence: MIT
+
+The MIT License
+
+Copyright © 2010-2025 three.js authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+Pyodide (version 0.29.4)
+https://pyodide.org  -  https://github.com/pyodide/pyodide
+
+NOT included in this package. Pages written by `pyctures build`, and pages
+that use the browser half on their own, load Pyodide at run time from its
+official CDN:
+  https://cdn.jsdelivr.net/pyodide/v0.29.4/full/
+
+Licence: Mozilla Public License 2.0 (https://mozilla.org/MPL/2.0/).
+Pyodide includes CPython (Python Software Foundation License) and the
+packages it distributes each carry their own licence; see
+https://pyodide.org/en/stable/project/about.html and the files on the CDN.

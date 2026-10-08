@@ -20,3 +20,4 @@ npm/*.tgz
 # Owner notes, kept locally
 PUBLISHING.md
 .circuitry/
+.playwright-mcp/

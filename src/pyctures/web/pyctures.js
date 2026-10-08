@@ -27,6 +27,11 @@
  * A scene starts when it first scrolls into view, and pauses while it is out
  * of view or the tab is hidden, so a page with several scenes stays light.
  *
+ * IMAGES BY RELATIVE PATH (`load_image("textures/brick.png")`, a texture) are
+ * relative to the scene's file. Before a frame is replayed, a string in its
+ * commands that names one is pointed at the packed copy when the page carries
+ * it (a single-file build), or at the file beside the scene otherwise.
+ *
  * Author: John Wylie. MIT licence.
  */
 
@@ -49,12 +54,66 @@ function prop(obj, name) {
   return name
 }
 
+// ---------------------------------------------------------------- images by relative path
+
+/** A relative path to an image: no scheme, not absolute, an image extension (pages.IMAGE_PATH). */
+const IMAGE_PATH = /^(?![a-z][a-z0-9+.-]*:|\/)(?:\.\/)?[^\s"'<>?#]+\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i
+export function isRelativeImagePath(s) { return typeof s === 'string' && s.length < 300 && IMAGE_PATH.test(s) }
+export const IMAGE_TYPES = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', avif: 'image/avif',
+}
+/** The key an image is packed under: as written, without a leading "./". */
+const packedKey = (s) => s.replace(/^(\.\/)+/, '')
+
 /**
- * The renderer for one canvas. `hooks`: onEvent(event), onSize(size),
+ * Where a scene's relative image paths point: `packed` ({path: base64}, a
+ * single-file page's images) first, then the file beside the scene. Returns
+ * null when nothing needs changing (no packed images, and the scene is in the
+ * page's own folder), so most scenes pay nothing.
+ */
+export function imageResolver(src, packed) {
+  const keys = packed ? Object.keys(packed).filter(isRelativeImagePath) : []
+  const scene = new URL(src || '', location.href)
+  const besidePage = new URL('./', scene).href === new URL('./', location.href).href
+  if (!keys.length && besidePage) return null
+  const done = new Map()
+  return (s) => {
+    if (!isRelativeImagePath(s)) return undefined
+    let url = done.get(s)
+    if (url === undefined) {
+      const key = packedKey(s)
+      if (packed && packed[key] != null) url = 'data:' + (IMAGE_TYPES[key.split('.').pop().toLowerCase()] || 'application/octet-stream') + ';base64,' + packed[key]
+      else url = besidePage ? null : new URL(s, scene).href
+      done.set(s, url)
+    }
+    return url || undefined
+  }
+}
+
+/** Swap every string in a frame's commands that `resolve` maps (in place). */
+function swapStrings(v, resolve) {
+  for (let i = 0; i < v.length; i++) {
+    const x = v[i]
+    if (typeof x === 'string') { const u = resolve(x); if (u !== undefined) v[i] = u }
+    else if (x && typeof x === 'object') {
+      if (Array.isArray(x)) swapStrings(x, resolve)
+      else for (const k in x) {
+        const y = x[k]
+        if (typeof y === 'string') { const u = resolve(y); if (u !== undefined) x[k] = u }
+        else if (y && typeof y === 'object') swapStrings(Array.isArray(y) ? y : [y], resolve)
+      }
+    }
+  }
+}
+
+/**
+ * The renderer for one canvas. `images`: a function from a string in the
+ * commands to the URL to use instead (see imageResolver), or null. `hooks`: onEvent(event), onSize(size),
  * onApplied({reads, errors, ms, n, timing}), onReads(reads) (a promise has
  * settled), isActive() (has the keyboard).
  */
-export function createRenderer(canvas, { three = null, addons = null, hooks }) {
+export function createRenderer(canvas, { three = null, addons = null, images = null, hooks }) {
   const H = new Map()
   let ctx2d = null
   let dpr = 1, cssW = 0, cssH = 0
@@ -319,6 +378,7 @@ export function createRenderer(canvas, { three = null, addons = null, hooks }) {
   return {
     /** Queue one frame's commands; drawn on the next refresh. */
     push(cmds, at) {
+      if (images && cmds) swapStrings(cmds, images)
       pending.push({ cmds: cmds || [], at, recv: at ? abs() : 0 })
       if (!scheduled) { scheduled = true; requestAnimationFrame(present) }
     },
@@ -855,6 +915,7 @@ export class Scene {
       this.renderer = createRenderer(this.canvas, {
         three: three && three.three,
         addons: three && three.addons,
+        images: imageResolver(this.opt.src, inl && inl.files),
         hooks: {
           onEvent: (e) => { if (r.live) r.events.push(e) },
           onSize: (s) => { r.size = s },

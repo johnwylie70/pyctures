@@ -9,6 +9,12 @@ put on any static host, or inside an existing site.
 When the output ends in ``.html`` (``-o scene.html``) the result is ONE file
 holding all of that (three.js only when the scene uses it), which also opens
 straight from disk.
+
+Images the scene loads by a relative path (``load_image("textures/brick.png")``,
+``THREE.TextureLoader().load(...)``) are found in its string literals and
+included: copied beside the page in a folder, packed into a single file (where
+the browser half points those loads at the packed copy). An image that is
+named but not there is a warning, not an error.
 """
 import shutil
 import sys
@@ -39,9 +45,9 @@ def build(target, out, add=(), title=None, say=print):
         return build_single(target, out, add, title, say)
     out.mkdir(parents=True, exist_ok=True)
     if target.is_file():
-        written = _build_scene(target, out, add, title)
+        written = _build_scene(target, out, add, title, say)
     else:
-        written = _build_folder(target, out, title)
+        written = _build_folder(target, out, title, say)
     copy_assets(out)
     say("Built %s" % out)
     for w in written:
@@ -60,6 +66,11 @@ def build_single(scene, out, add=(), title=None, say=print):
     files = {}
     for rel, path in _added(scene, add):
         files[rel] = path.read_bytes()
+    images = []
+    for key, path in scene_images(scene, source, say):
+        if key not in files:
+            files[key] = path.read_bytes()
+        images.append(key)
     three = pages.uses_three(source)
     page = pages.single_page(title or scene.stem.replace("_", " ").title(), scene.name, source,
                              files=files, three=three)
@@ -67,6 +78,8 @@ def build_single(scene, out, add=(), title=None, say=print):
     out.write_text(page, encoding="utf-8")
     say("Built %s (%d KB%s)" % (_short(out), (len(page.encode("utf-8")) + 1023) // 1024,
                                  ", with three.js" if three else ""))
+    if images:
+        say("  with %d image%s: %s" % (len(images), "" if len(images) == 1 else "s", ", ".join(images)))
     say("One file: open it in a browser, or put it on any website.")
     return out
 
@@ -88,6 +101,22 @@ def _added(scene, add):
             yield rel.as_posix(), extra
 
 
+def scene_images(scene, source, say=print):
+    """(key, file) for each image the scene names by a relative path and that
+    exists beside it. A named image that is not there is reported with ``say``."""
+    found = []
+    for written in pages.image_paths_in_source(source):
+        key = pages.packed_key(written)
+        path = (scene.parent / key).resolve()
+        if path.is_file():
+            if key not in (k for k, _ in found):
+                found.append((key, path))
+        else:
+            say("Warning: %s loads the image %s, which was not found (looked for %s)."
+                % (scene.name, written, _short(path)))
+    return found
+
+
 def _top_level(scene, add):
     """What each --add names, relative to the scene (a folder as itself)."""
     for extra in add:
@@ -98,7 +127,7 @@ def _top_level(scene, add):
             yield extra.name
 
 
-def _build_scene(scene, out, add, title):
+def _build_scene(scene, out, add, title, say):
     if scene.suffix != ".py":
         raise SystemExit("pyctures: %s is not a .py file" % scene.name)
     written = []
@@ -110,6 +139,16 @@ def _build_scene(scene, out, add, title):
         shutil.copyfile(f, out / rel)
         files.append(rel)
     written.extend(dict.fromkeys(_top_level(scene, add)))
+    for key, f in scene_images(scene, scene.read_text(encoding="utf-8"), say):
+        target = (out / key).resolve()
+        if out != target.parent and out not in target.parents:
+            say("Warning: %s loads the image %s, which is outside the scene's folder and was "
+                "not copied. Move it into the scene's folder." % (scene.name, key))
+            continue
+        if target != f:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(f, target)
+        written.append(key)
     page = pages.scene_page(title or scene.stem.replace("_", " ").title(), scene.name,
                             "pyctures/pyctures.js", files=files)
     (out / "index.html").write_text(page, encoding="utf-8")
@@ -117,7 +156,7 @@ def _build_scene(scene, out, add, title):
     return written
 
 
-def _build_folder(folder, out, title):
+def _build_folder(folder, out, title, say):
     """Copy a folder (a web page with scenes in it, or a folder of scenes)."""
     written = []
     scenes = []
@@ -130,8 +169,11 @@ def _build_folder(folder, out, title):
         (out / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(f, out / rel)
         written.append(rel.as_posix())
-        if f.suffix == ".py" and len(rel.parts) == 1:
-            scenes.append(rel)
+        if f.suffix == ".py":
+            # Copied with the folder already; only say which named images are missing.
+            scene_images(f, f.read_text(encoding="utf-8", errors="replace"), say)
+            if len(rel.parts) == 1:
+                scenes.append(rel)
     if not (folder / "index.html").exists():
         # A folder of scenes: one page each, and a list of them.
         links = []

@@ -235,7 +235,7 @@ def draw():
 | Call | What it does |
 |---|---|
 | `img = load_image("https://…/picture.png")` | Starts loading a picture |
-| `img = load_image("cat.png")` | A picture beside your scene, by its name. With `pyctures build`, include it with `--add cat.png`. |
+| `img = load_image("cat.png")` | A picture beside your scene, by its path from the scene. `pyctures build` includes it. |
 | `ctx.draw_image(img, x, y)` | Draws it at its own size, top-left at `x, y` |
 | `ctx.draw_image(img, x, y, w, h)` | Draws it stretched to `w` by `h` |
 | `ctx.draw_image(img, sx, sy, sw, sh, x, y, w, h)` | Draws one part of it (for sprite sheets) |

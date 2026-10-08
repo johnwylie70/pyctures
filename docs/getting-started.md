@@ -90,6 +90,10 @@ pyctures build hello.py -o hello.html
 
 The file holds your scene, the browser half of Pyctures and, only if the scene is 3D, three.js. A 2D scene comes to about 80 KB, a 3D one about 850 KB. Open it straight from your disk with a double-click, send it to someone, or upload it anywhere that takes a web page. Files added with `--add` go inside it too.
 
+### Images
+
+Images the scene loads by a relative path are included automatically: `load_image("textures/brick.png")`, `THREE.TextureLoader().load("textures/brick.png")`, or any other path to a `.png`, `.jpg`, `.gif`, `.webp`, `.svg`, `.bmp` or `.avif` file written in the scene. The path is relative to the scene's file. A folder build copies each one beside the page; a single file holds them inside it. An image that is named but not there is reported as a warning, and the build carries on. A path put together while the scene runs (`"frame%d.png" % n`) cannot be seen in advance: add those images with `--add`.
+
 ### What runs where
 
 In a built page, Python runs inside the browser with [Pyodide](https://pyodide.org), which is loaded from its official CDN (`cdn.jsdelivr.net/pyodide`) the first time the page opens. That first load takes a few seconds; after that the browser keeps it. Libraries the scene imports, such as numpy, are loaded from the same place when the scene needs them. Every path in the folder is relative, so it works wherever you put it.
@@ -100,7 +104,7 @@ Python runs in a Web Worker, a background thread of the browser, and the page's 
 |---|---|
 | `-o site/` | The folder to write (default `site`). Files of the same name in it are replaced; nothing else is removed. |
 | `-o game.html` | Write one self-contained `.html` file instead of a folder. |
-| `--add data.csv` | Also copy a file or folder the scene opens or imports. Repeat it for more. |
+| `--add data.csv` | Also copy a file or folder the scene opens or imports. Repeat it for more. Images the scene names are included without it. |
 | `--title "My game"` | The page's title. |
 
 `pyctures build` also takes a folder: a web page with scenes in it, or a folder of scenes. See [Use it on your website](website.md).

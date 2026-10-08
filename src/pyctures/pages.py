@@ -63,7 +63,9 @@ def single_page(title, name, source, files=None, three=False):
     half (whose worker it carries inside), and three.js only when the scene
     uses it. Python itself (Pyodide) still loads from its CDN.
 
-    ``files``: {path: bytes} the scene opens or imports.
+    ``files``: {path: bytes} the scene opens or imports, and the images it
+    loads by a relative path (the browser half points those loads at the
+    packed copy).
     """
     files = files or {}
     data = {
@@ -104,6 +106,32 @@ html,body{{margin:0;height:100%;overflow:hidden;background:#0b0b0f}}
 </html>
 """.format(title=html.escape(title), licence=licence, attrs=attrs, data=_json_for_html(data),
            script=_script_for_html((WEB / "pyctures.js").read_text(encoding="utf-8")))
+
+
+# A relative path to an image: no scheme, not absolute, an image extension.
+# The browser half (pyctures.js, IMAGE_PATH) makes the same test.
+IMAGE_PATH = re.compile(r"^(?![a-z][a-z0-9+.-]*:|/)(?:\./)?[^\s\"'<>?#]+\.(png|jpe?g|gif|webp|svg|bmp|avif)$",
+                        re.I)
+_LITERAL = re.compile(r"""(['"])((?:\\.|(?!\1)[^\\\n])*)\1""")
+
+
+def is_relative_image_path(s):
+    return len(s) < 300 and IMAGE_PATH.match(s) is not None
+
+
+def image_paths_in_source(source):
+    """Relative image paths named by string literals in a scene, as written
+    (``"./a.png"`` stays ``./a.png``). Paths built at run time cannot be seen."""
+    found = []
+    for m in _LITERAL.finditer(source):
+        if is_relative_image_path(m.group(2)) and m.group(2) not in found:
+            found.append(m.group(2))
+    return found
+
+
+def packed_key(path):
+    """The key an image is packed under: as written, without a leading ``./``."""
+    return re.sub(r"^(\./)+", "", path)
 
 
 def uses_three(source):

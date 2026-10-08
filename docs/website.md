@@ -103,3 +103,4 @@ While `pyctures run` serves a folder, the pages in it run their scenes with your
 - **The first visit loads Python** (several megabytes, from Pyodide's CDN), which takes a few seconds. After that, the browser keeps it.
 - **A loop that never waits** (`while True:` without `await frame()`) stops that scene, and any other scene on the page, until it is stopped: after three seconds the scene says so and offers **Stop**. The page itself keeps working. Use `draw()` and `update()`, or wait in every loop.
 - **A built folder must be served** over `http://` or `https://`. Opening its `index.html` straight from disk (`file://`) does not work, because the browser will not load the scene's `.py` file that way. A single-file build (`-o scene.html`) opens from disk.
+- **Image paths are relative to the scene's file**, not the page: a scene at `scenes/game.py` that loads `"sprites/ship.png"` reads `scenes/sprites/ship.png`.

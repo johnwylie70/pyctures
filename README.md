@@ -57,7 +57,9 @@ pyctures build hello.py -o hello.html
 
 `hello.html` holds the scene and everything it needs (three.js too, if the scene is 3D), so you can email it, put it on any website, or open it straight from your disk. Python still loads from Pyodide's CDN.
 
-Either way, Python runs in a background thread of the browser (a Web Worker), and the page only draws. A slow frame or a stuck loop cannot hold up the page, so scenes play smoothly on phones and tablets too. Add `?measure=1` to the address to see the frame rate and where each frame's time goes.
+Either way, images the scene loads by a relative path, such as `load_image("textures/brick.png")` or `THREE.TextureLoader().load("textures/brick.png")`, are included automatically: copied into the folder, or packed into the one file. A named image that is missing is reported as a warning.
+
+Python runs in a background thread of the browser (a Web Worker), and the page only draws. A slow frame or a stuck loop cannot hold up the page, so scenes play smoothly on phones and tablets too. Add `?measure=1` to the address to see the frame rate and where each frame's time goes.
 
 ## Use it on your website
 

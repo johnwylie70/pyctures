@@ -232,7 +232,7 @@ def draw():
 
 | Python | Standard | What it does |
 |---|---|---|
-| `img = load_image(address)` | | Starts loading a picture from a web address or a `data:` address. It draws once loaded. |
+| `img = load_image(address)` | | Starts loading a picture from a path beside the scene (`"cat.png"`), a web address or a `data:` address. It draws once loaded. |
 | `ctx.draw_image(img, x, y)` | `drawImage` | Draws it at its own size, top-left at `x, y` |
 | `ctx.draw_image(img, x, y, w, h)` | `drawImage` | Draws it stretched to `w` by `h` |
 | `ctx.draw_image(img, sx, sy, sw, sh, x, y, w, h)` | `drawImage` | Cuts the part `sx, sy, sw, sh` out of the picture and draws it at `x, y, w, h`. This is how sprite sheets work. |

@@ -418,7 +418,7 @@ A texture is a picture wrapped round a surface. Give it to a material as `map=te
 
 | Python | What it does |
 |---|---|
-| `THREE.TextureLoader().load(address)` | Loads a picture from a web address. The site must allow other pages to use its pictures. |
+| `THREE.TextureLoader().load(address)` | Loads a picture: a path from the scene (`"textures/brick.png"`, included by `pyctures build`), or a web address, whose site must allow other pages to use its pictures. |
 | `THREE.CanvasTexture(a_canvas)` | Uses a 2D canvas you drew on as the picture: text, patterns, anything from [2D functions](2d-functions.md) |
 | `texture.needsUpdate = True` | After you draw on that canvas again, shows the change |
 | `texture.wrapS = texture.wrapT = THREE.RepeatWrapping` | Lets the picture repeat across and down (write it as two lines in Python) |

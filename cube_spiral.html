@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cube Spiral · Pyctures</title>
+<meta name="description" content="400 cubes in a rainbow spiral, turning. Written in Python with Pyctures, running live in your browser.">
+<meta property="og:title" content="Cube Spiral · Pyctures">
+<meta property="og:description" content="400 cubes in a rainbow spiral, turning. Written in Python with Pyctures, running live in your browser.">
+<meta property="og:image" content="https://johnwylie70.github.io/pyctures/thumbs/solar_system.jpg">
+<style>
+:root { --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --dim: #9198a1; --accent: #3fb950; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, sans-serif; }
+a { color: var(--accent); }
+header, main, footer { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 40px; }
+h1 { font-size: clamp(32px, 6vw, 52px); line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
+h1 small { display: block; font-size: 0.45em; color: var(--dim); font-weight: 500; letter-spacing: 0; margin-top: 8px; }
+.lead { font-size: 18px; color: var(--dim); max-width: 720px; margin: 0 0 24px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 40px; }
+.install { font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel); border: 1px solid var(--line);
+           border-radius: 8px; padding: 10px 14px; display: inline-flex; gap: 12px; align-items: center; }
+.install button { background: none; border: 1px solid var(--line); color: var(--dim); border-radius: 6px; padding: 2px 8px; cursor: pointer; font: inherit; font-size: 13px; }
+.btn { display: inline-block; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); color: var(--text);
+       text-decoration: none; background: var(--panel); font-weight: 600; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #04260f; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; text-decoration: none; color: var(--text);
+        transition: transform .15s, border-color .15s; }
+.card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.card img, .card .noimg { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #000; }
+.card div { padding: 12px 14px 14px; }
+.card h3 { margin: 0 0 4px; font-size: 17px; }
+.card p { margin: 0; color: var(--dim); font-size: 14px; }
+.tag { font-size: 12px; color: var(--dim); border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; margin-left: 6px; font-weight: 500; vertical-align: 2px; }
+footer { color: var(--dim); font-size: 14px; padding-top: 48px; padding-bottom: 48px; }
+.scene { width: 100%; aspect-ratio: 16 / 9; max-height: 75vh; border-radius: 12px; overflow: hidden; background: #000; border: 1px solid var(--line); }
+.crumbs { padding-top: 24px; font-size: 14px; }
+.scene-head h1 { font-size: clamp(26px, 5vw, 38px); margin: 8px 0 4px; }
+.scene-head p { margin: 0 0 16px; color: var(--dim); }
+.cols { display: grid; grid-template-columns: 1fr; gap: 24px; margin-top: 24px; }
+@media (min-width: 900px) { .cols { grid-template-columns: 2fr 1fr; } }
+pre { margin: 0; background: var(--panel) !important; border: 1px solid var(--line); border-radius: 12px; padding: 16px !important;
+      overflow-x: auto; font-size: 14px; line-height: 1.5; }
+.cols > div { min-width: 0; }
+pre code.hljs { padding: 0; background: none; }
+.side h2 { font-size: 16px; margin: 0 0 8px; }
+.side pre { font-size: 13px; padding: 10px 12px !important; margin-bottom: 16px; }
+.side p { color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+<div class="crumbs"><a href="index.html">← All scenes</a></div>
+<div class="scene-head"><h1>Cube Spiral</h1><p>400 cubes in a rainbow spiral, turning. Drag to look around.</p></div>
+<div class="scene" data-pyctures-src="cube_spiral.py"></div>
+<div class="cols"><div><pre><code class="language-python"># Cube Spiral: 400 cubes in a rainbow spiral, turning.
+import math, random
+
+renderer = THREE.WebGLRenderer(canvas=canvas, antialias=True)
+renderer.setPixelRatio(pixel_ratio)
+renderer.setSize(width, height, False)
+scene = THREE.Scene()
+scene.background = THREE.Color(&quot;#101018&quot;)
+camera = THREE.PerspectiveCamera(50, width / height, 0.1, 100)
+camera.position.set(0, 5, 11)
+camera.lookAt(0, 0, 0)
+scene.add(THREE.HemisphereLight(&quot;white&quot;, &quot;#223&quot;, 2))
+
+# 400 cubes in one InstancedMesh
+count = 400
+cubes = THREE.InstancedMesh(THREE.BoxGeometry(0.25, 0.25, 0.25), THREE.MeshStandardMaterial(), count)
+place = THREE.Matrix4()
+for i in range(count):
+    a = i * 0.25
+    r = 1 + i * 0.01
+    place.setPosition(r * math.cos(a), i * 0.008 - 1.6, r * math.sin(a))
+    cubes.setMatrixAt(i, place)
+    cubes.setColorAt(i, THREE.Color(f&quot;hsl({i}, 80%, 60%)&quot;))
+cubes.instanceMatrix.needsUpdate = True
+scene.add(cubes)
+
+# a circle as a LineLoop, and a dashed line
+circle = [THREE.Vector3(4 * math.cos(a / 20 * math.tau), -1.7, 4 * math.sin(a / 20 * math.tau)) for a in range(20)]
+scene.add(THREE.LineLoop(THREE.BufferGeometry().setFromPoints(circle), THREE.LineBasicMaterial(color=&quot;white&quot;)))
+dashed = THREE.Line(THREE.BufferGeometry().setFromPoints([THREE.Vector3(0, -1.7, 0), THREE.Vector3(0, 2.5, 0)]),
+                    THREE.LineDashedMaterial(color=&quot;gold&quot;, dashSize=0.2, gapSize=0.1))
+dashed.computeLineDistances()
+scene.add(dashed)
+
+# a label: a Sprite with a picture drawn on a 2D canvas
+label = js.document.create_element(&quot;canvas&quot;)
+label.width = 256
+label.height = 64
+pen = label.get_context(&quot;2d&quot;)
+pen.fill_style = &quot;white&quot;
+pen.font = &quot;bold 40px sans-serif&quot;
+pen.text_align = &quot;center&quot;
+pen.fill_text(&quot;400 cubes&quot;, 128, 46)
+sign = THREE.Sprite(THREE.SpriteMaterial(map=THREE.CanvasTexture(label)))
+sign.scale.set(2, 0.5, 1)
+sign.position.y = 2.8
+scene.add(sign)
+
+def draw():
+    cubes.rotation.y += 0.005
+    renderer.render(scene, camera)
+</code></pre></div>
+<div class="side"><h2>Run it yourself</h2>
+<pre>pip install pyctures
+pyctures run cube_spiral.py</pre>
+<h2>Put it on your website</h2>
+<pre>pyctures build cube_spiral.py -o site/</pre>
+<p>Python runs in the visitor's browser, so any static host works. <a href="https://github.com/johnwylie70/pyctures/blob/main/docs/website.md">How</a> · <a href="https://github.com/johnwylie70/pyctures/blob/main/examples/cube_spiral.py">This file on GitHub</a></p>
+</div></div>
+</main>
+<footer>Pyctures 0.1.0 · MIT licence · <a href="https://github.com/johnwylie70/pyctures">GitHub</a> · <a href="https://pypi.org/project/pyctures/">PyPI</a> · <a href="https://www.npmjs.com/package/pyctures">npm</a><br>Pyctures is also built into <a href="https://www.circuitry.dev">Circuitry Studio</a>, where these scenes run in a code editor with a live preview beside the code.</footer>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+<script>hljs.highlightAll()</script>
+<script type="module" src="pyctures/pyctures.js"></script>
+</body>
+</html>

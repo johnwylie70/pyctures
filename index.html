@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pyctures: Python 2D and 3D graphics in your browser</title>
+<meta name="description" content="Games, animations, charts and 3D scenes written in Python, running live in your browser. Click any one to see its code.">
+<meta property="og:title" content="Pyctures: Python 2D and 3D graphics in your browser">
+<meta property="og:description" content="Games, animations, charts and 3D scenes written in Python, running live in your browser. Click any one to see its code.">
+<meta property="og:image" content="https://johnwylie70.github.io/pyctures/thumbs/solar_system.jpg">
+<style>
+:root { --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --dim: #9198a1; --accent: #3fb950; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, sans-serif; }
+a { color: var(--accent); }
+header, main, footer { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 40px; }
+h1 { font-size: clamp(32px, 6vw, 52px); line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
+h1 small { display: block; font-size: 0.45em; color: var(--dim); font-weight: 500; letter-spacing: 0; margin-top: 8px; }
+.lead { font-size: 18px; color: var(--dim); max-width: 720px; margin: 0 0 24px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 40px; }
+.install { font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel); border: 1px solid var(--line);
+           border-radius: 8px; padding: 10px 14px; display: inline-flex; gap: 12px; align-items: center; }
+.install button { background: none; border: 1px solid var(--line); color: var(--dim); border-radius: 6px; padding: 2px 8px; cursor: pointer; font: inherit; font-size: 13px; }
+.btn { display: inline-block; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); color: var(--text);
+       text-decoration: none; background: var(--panel); font-weight: 600; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #04260f; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; text-decoration: none; color: var(--text);
+        transition: transform .15s, border-color .15s; }
+.card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.card img, .card .noimg { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #000; }
+.card div { padding: 12px 14px 14px; }
+.card h3 { margin: 0 0 4px; font-size: 17px; }
+.card p { margin: 0; color: var(--dim); font-size: 14px; }
+.tag { font-size: 12px; color: var(--dim); border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; margin-left: 6px; font-weight: 500; vertical-align: 2px; }
+footer { color: var(--dim); font-size: 14px; padding-top: 48px; padding-bottom: 48px; }
+.scene { width: 100%; aspect-ratio: 16 / 9; max-height: 75vh; border-radius: 12px; overflow: hidden; background: #000; border: 1px solid var(--line); }
+.crumbs { padding-top: 24px; font-size: 14px; }
+.scene-head h1 { font-size: clamp(26px, 5vw, 38px); margin: 8px 0 4px; }
+.scene-head p { margin: 0 0 16px; color: var(--dim); }
+.cols { display: grid; grid-template-columns: 1fr; gap: 24px; margin-top: 24px; }
+@media (min-width: 900px) { .cols { grid-template-columns: 2fr 1fr; } }
+pre { margin: 0; background: var(--panel) !important; border: 1px solid var(--line); border-radius: 12px; padding: 16px !important;
+      overflow-x: auto; font-size: 14px; line-height: 1.5; }
+.cols > div { min-width: 0; }
+pre code.hljs { padding: 0; background: none; }
+.side h2 { font-size: 16px; margin: 0 0 8px; }
+.side pre { font-size: 13px; padding: 10px 12px !important; margin-bottom: 16px; }
+.side p { color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+<h1>Pyctures<small>Python 2D and 3D graphics, drawn in your web browser</small></h1>
+<p class="lead">Every scene below is a short Python program. Click one and it runs live in your browser, with its code beside it. Python gets the web's 2D canvas and three.js 3D, with the names JavaScript uses.</p>
+<div class="actions"><span class="install">pip install pyctures<button data-copy="pip install pyctures">Copy</button></span><a class="btn primary" href="https://github.com/johnwylie70/pyctures">Star on GitHub</a><a class="btn" href="https://github.com/johnwylie70/pyctures/tree/main/docs">Docs</a></div>
+</header>
+<main><div class="grid">
+<a class="card" href="solar_system.html"><img src="thumbs/solar_system.jpg" alt="Solar System" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Solar System<span class="tag">3D</span></h3><p>Planets in turning groups, a moon, a light at the sun and 2,000 stars.</p></div></a>
+<a class="card" href="star_catcher.html"><img src="thumbs/star_catcher.jpg" alt="Star Catcher" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Star Catcher<span class="tag">2D</span></h3><p>A 2D game with emoji sprites, a score and lives.</p></div></a>
+<a class="card" href="cube_spiral.html"><img src="thumbs/cube_spiral.jpg" alt="Cube Spiral" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Cube Spiral<span class="tag">3D</span></h3><p>400 cubes in a rainbow spiral, turning.</p></div></a>
+<a class="card" href="cube_dodge.html"><img src="thumbs/cube_dodge.jpg" alt="Cube Dodge" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Cube Dodge<span class="tag">3D</span></h3><p>A 3D game with shadows, fog and the keyboard.</p></div></a>
+<a class="card" href="bouncing_balls.html"><img src="thumbs/bouncing_balls.jpg" alt="Bouncing Balls" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Bouncing Balls<span class="tag">2D</span></h3><p>A 2D animation with trails and hsl() colours.</p></div></a>
+<a class="card" href="torus_knot.html"><img src="thumbs/torus_knot.jpg" alt="Torus Knot" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Torus Knot<span class="tag">3D</span></h3><p>One shape, lit, turning.</p></div></a>
+<a class="card" href="live_chart.html"><img src="thumbs/live_chart.jpg" alt="Live Chart" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Live Chart<span class="tag">2D</span></h3><p>A line chart of a made-up sensor, updating as you watch.</p></div></a>
+<a class="card" href="wave_grid.html"><img src="thumbs/wave_grid.jpg" alt="Wave Grid" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Wave Grid<span class="tag">3D</span></h3><p>225 cubes rising and falling like water.</p></div></a>
+<a class="card" href="starfield.html"><img src="thumbs/starfield.jpg" alt="Starfield" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Starfield<span class="tag">2D</span></h3><p>Fly through 300 stars.</p></div></a>
+<a class="card" href="lit_scene.html"><img src="thumbs/lit_scene.jpg" alt="Lit Scene" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Lit Scene<span class="tag">3D</span></h3><p>Shapes on a floor, with a spotlight and shadows.</p></div></a>
+<a class="card" href="spiral_garden.html"><img src="thumbs/spiral_garden.jpg" alt="Spiral Garden" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Spiral Garden<span class="tag">2D</span></h3><p>200 dots placed on the golden angle, turning slowly.</p></div></a>
+<a class="card" href="from_javascript_3d.html"><img src="thumbs/from_javascript_3d.jpg" alt="From JavaScript: 3D" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>From JavaScript: 3D<span class="tag">3D</span></h3><p>The classic three.js spinning cube, line for line in Python.</p></div></a>
+<a class="card" href="from_javascript_2d.html"><img src="thumbs/from_javascript_2d.jpg" alt="From JavaScript: 2D" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>From JavaScript: 2D<span class="tag">2D</span></h3><p>A canvas example written the way JavaScript writes it.</p></div></a>
+<a class="card" href="type_and_measure.html"><img src="thumbs/type_and_measure.jpg" alt="Typing" loading="lazy" onerror="this.outerHTML='<span class=noimg></span>'"><div><h3>Typing<span class="tag">2D</span></h3><p>Type and your words appear, with a box drawn to fit them.</p></div></a>
+</div></main>
+<footer>Pyctures 0.1.0 · MIT licence · <a href="https://github.com/johnwylie70/pyctures">GitHub</a> · <a href="https://pypi.org/project/pyctures/">PyPI</a> · <a href="https://www.npmjs.com/package/pyctures">npm</a><br>Pyctures is also built into <a href="https://www.circuitry.dev">Circuitry Studio</a>, where these scenes run in a code editor with a live preview beside the code.</footer>
+<script>
+document.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => {
+  navigator.clipboard.writeText(b.dataset.copy).then(() => { b.textContent = 'Copied'; setTimeout(() => b.textContent = 'Copy', 1200) })
+})
+</script>
+</body>
+</html>

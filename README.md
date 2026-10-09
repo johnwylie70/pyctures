@@ -1,8 +1,12 @@
 # Pyctures
 
-Pyctures ("Python pictures") gives Python the full set of JavaScript graphics functions: the web's 2D canvas for 2D, and three.js for 3D. Write a short Python program and it draws in your web browser: shapes, text, moving sprites, games, animations, live charts and lit 3D scenes. The names are the ones JavaScript uses, so any JavaScript graphics example can be brought across easily. Run a scene with your own Python while you write it, then build it into a folder that runs in any browser, on any website.
+[![PyPI](https://img.shields.io/pypi/v/pyctures)](https://pypi.org/project/pyctures/) [![npm](https://img.shields.io/npm/v/pyctures)](https://www.npmjs.com/package/pyctures) [![Python 3.9+](https://img.shields.io/pypi/pyversions/pyctures)](https://pypi.org/project/pyctures/) [![MIT licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
-![A 3D Pyctures scene: Python code beside its live preview](docs/images/circuitry-studio-ipad.jpg)
+[![Pyctures scenes: a solar system, a 2D game, a spiral of 400 cubes, bouncing balls and a wave of cubes, each a short Python program](docs/images/gallery.gif)](https://johnwylie70.github.io/pyctures/)
+
+**[See them running in your browser, with their code →](https://johnwylie70.github.io/pyctures/)** Nothing to install.
+
+Pyctures ("Python pictures") gives Python the full set of JavaScript graphics functions: the web's 2D canvas for 2D, and three.js for 3D. Write a short Python program and it draws in your web browser: shapes, text, moving sprites, games, animations, live charts and lit 3D scenes. The names are the ones JavaScript uses, so any JavaScript graphics example can be brought across easily. Run a scene with your own Python while you write it, then build it into a folder that runs in any browser, on any website.
 
 ## Install
 
@@ -122,7 +126,7 @@ The full guide, with a 2D and a 3D example side by side: [Bringing a JavaScript 
 
 ## Examples
 
-In [`examples/`](examples), each with a comment at the top saying what it shows:
+In [`examples/`](examples), each with a comment at the top saying what it shows. All of them run in the [online gallery](https://johnwylie70.github.io/pyctures/).
 
 | File | What it is |
 |---|---|
@@ -132,6 +136,8 @@ In [`examples/`](examples), each with a comment at the top saying what it shows:
 | `bouncing_balls.py` | A 2D animation with trails; click to add balls |
 | `solar_system.py` | Planets, a moon and 2,000 stars in 3D |
 | `live_chart.py` | A live line chart with a readout under the mouse |
+| `cube_spiral.py`, `wave_grid.py`, `torus_knot.py` | 3D: a rainbow spiral of 400 cubes, a wave of 225 cubes, a lit knot |
+| `starfield.py`, `spiral_garden.py` | 2D: fly through stars, dots on the golden angle |
 | `type_and_measure.py` | Keyboard input, and reading a value back with `await` |
 | `from_javascript_2d.py`, `from_javascript_3d.py` | JavaScript examples brought across |
 | `website/` | A web page with two scenes on it |

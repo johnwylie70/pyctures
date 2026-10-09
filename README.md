@@ -1,6 +1,6 @@
 # Pyctures
 
-[![PyPI](https://img.shields.io/pypi/v/pyctures)](https://pypi.org/project/pyctures/) [![npm](https://img.shields.io/npm/v/pyctures)](https://www.npmjs.com/package/pyctures) [![Python 3.9+](https://img.shields.io/pypi/pyversions/pyctures)](https://pypi.org/project/pyctures/) [![MIT licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/pyctures?color=blue)](https://pypi.org/project/pyctures/) [![npm](https://img.shields.io/npm/v/pyctures?color=blue)](https://www.npmjs.com/package/pyctures) [![Python 3.9+](https://img.shields.io/pypi/pyversions/pyctures)](https://pypi.org/project/pyctures/) [![MIT licence](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
 [![Pyctures scenes: a solar system, a 2D game, a spiral of 400 cubes, bouncing balls and a wave of cubes, each a short Python program](docs/images/gallery.gif)](https://johnwylie70.github.io/pyctures/)
 

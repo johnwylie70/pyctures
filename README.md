@@ -47,41 +47,6 @@ Your browser opens on the scene. The program runs in your own Python, so numpy a
 
 Options: `--port 9000`, `--no-browser`.
 
-## A 3D scene, with a picture from a file
-
-Put a picture beside your scene, here `textures/crate.png`, and wrap it round a cube:
-
-```python
-renderer = THREE.WebGLRenderer(canvas=canvas, antialias=True)
-renderer.setPixelRatio(pixel_ratio)
-renderer.setSize(width, height, False)
-scene = THREE.Scene()
-scene.background = THREE.Color(0x1b2430)
-camera = THREE.PerspectiveCamera(50, width / height, 0.1, 100)
-camera.position.set(0, 1.2, 4)
-controls = addons.OrbitControls(camera, canvas)
-
-texture = THREE.TextureLoader().load("textures/crate.png")
-texture.colorSpace = THREE.SRGBColorSpace
-crate = THREE.Mesh(THREE.BoxGeometry(1.6, 1.6, 1.6), THREE.MeshStandardMaterial(map=texture))
-scene.add(crate)
-
-light = THREE.DirectionalLight(0xffffff, 2.5)
-light.position.set(3, 4, 5)
-scene.add(light)
-scene.add(THREE.AmbientLight(0xffffff, 0.6))
-
-def draw():
-    crate.rotation.y += 0.008
-    crate.rotation.x = 0.35
-    controls.update()
-    renderer.render(scene, camera)
-```
-
-![What textured_cube.py draws: a wooden crate, lit from above, turning](docs/images/readme-textured-cube.jpg)
-
-`THREE` is three.js, ready to use, and `addons.OrbitControls` lets you drag to turn the scene. The picture is loaded by its path from the scene, and `pyctures build` takes it along. This is [`examples/textured_cube.py`](examples/textured_cube.py).
-
 ## Share it
 
 ```bash
@@ -162,6 +127,41 @@ def draw():
 ![What the whole example draws: a blue cube, lit, turning](docs/images/readme-from-javascript.jpg)
 
 That is the heart of [`examples/from_javascript_3d.py`](examples/from_javascript_3d.py), which draws the cube above. The full guide, with a 2D and a 3D example side by side: [Bringing a JavaScript example across](docs/from-javascript.md).
+
+## A 3D scene, with a picture from a file
+
+The same cube with a picture wrapped round it. Put the picture beside your scene, here `textures/crate.png`:
+
+```python
+renderer = THREE.WebGLRenderer(canvas=canvas, antialias=True)
+renderer.setPixelRatio(pixel_ratio)
+renderer.setSize(width, height, False)
+scene = THREE.Scene()
+scene.background = THREE.Color(0x1b2430)
+camera = THREE.PerspectiveCamera(50, width / height, 0.1, 100)
+camera.position.set(0, 1.2, 4)
+controls = addons.OrbitControls(camera, canvas)
+
+texture = THREE.TextureLoader().load("textures/crate.png")
+texture.colorSpace = THREE.SRGBColorSpace
+crate = THREE.Mesh(THREE.BoxGeometry(1.6, 1.6, 1.6), THREE.MeshStandardMaterial(map=texture))
+scene.add(crate)
+
+light = THREE.DirectionalLight(0xffffff, 2.5)
+light.position.set(3, 4, 5)
+scene.add(light)
+scene.add(THREE.AmbientLight(0xffffff, 0.6))
+
+def draw():
+    crate.rotation.y += 0.008
+    crate.rotation.x = 0.35
+    controls.update()
+    renderer.render(scene, camera)
+```
+
+![What textured_cube.py draws: a wooden crate, lit from above, turning](docs/images/readme-textured-cube.jpg)
+
+`THREE` is three.js, ready to use, and `addons.OrbitControls` lets you drag to turn the scene. The picture is loaded by its path from the scene, and `pyctures build` takes it along. This is [`examples/textured_cube.py`](examples/textured_cube.py).
 
 ## Examples
 

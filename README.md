@@ -4,7 +4,7 @@
 
 [![Pyctures scenes: a solar system, a 2D game, a spiral of 400 cubes, bouncing balls and a wave of cubes, each a short Python program](docs/images/gallery.gif)](https://johnwylie70.github.io/pyctures/)
 
-**[See them running in your browser, with their code →](https://johnwylie70.github.io/pyctures/)** Nothing to install.
+**[See them running in your browser, with their code →](https://johnwylie70.github.io/pyctures/)** Nothing to install. Or **[change the code and run it on the Pyctures page →](https://www.circuitry.dev/pyctures)**
 
 Pyctures ("Python pictures") gives Python the full set of JavaScript graphics functions: the web's 2D canvas for 2D, and three.js for 3D. Write a short Python program and it draws in your web browser: shapes, text, moving sprites, games, animations, live charts and lit 3D scenes. The names are the ones JavaScript uses, so any JavaScript graphics example can be brought across easily. Run a scene with your own Python while you write it, then build it into a folder that runs in any browser, on any website.
 
@@ -198,7 +198,7 @@ Pyctures comes from [Circuitry Studio](https://www.circuitry.dev), where Python 
 
 ![A 3D Pyctures scene running in Circuitry Studio on iPad, with the Python code beside its live preview](docs/images/circuitry-studio-ipad.jpg)
 
-Its help pages: [Pyctures help](https://www.circuitry.dev/docs/pyctures) · [2D functions](https://www.circuitry.dev/docs/pyctures/2d-functions) · [3D functions](https://www.circuitry.dev/docs/pyctures/3d-functions) · [Colours](https://www.circuitry.dev/docs/pyctures/colours) · [Bringing a JavaScript example across](https://www.circuitry.dev/docs/pyctures/from-javascript)
+Its Pyctures page, where you can edit a scene and run it: [circuitry.dev/pyctures](https://www.circuitry.dev/pyctures). Its help pages: [Pyctures help](https://www.circuitry.dev/docs/pyctures) · [2D functions](https://www.circuitry.dev/docs/pyctures/2d-functions) · [3D functions](https://www.circuitry.dev/docs/pyctures/3d-functions) · [Colours](https://www.circuitry.dev/docs/pyctures/colours) · [Bringing a JavaScript example across](https://www.circuitry.dev/docs/pyctures/from-javascript)
 
 ## Licence
 

@@ -22,7 +22,7 @@
   "keywords": ["python", "graphics", "canvas", "three.js", "3d", "pyodide", "games", "animation", "education"],
   "author": "John Wylie",
   "license": "MIT",
-  "homepage": "https://github.com/johnwylie70/pyctures#readme",
+  "homepage": "https://www.circuitry.dev/pyctures",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/johnwylie70/pyctures.git",

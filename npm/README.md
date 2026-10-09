@@ -1,6 +1,6 @@
 # pyctures (browser)
 
-The browser half of [Pyctures](https://github.com/johnwylie70/pyctures): Python 2D and 3D graphics on any web page. Python runs in the visitor's browser with [Pyodide](https://pyodide.org), loaded from its official CDN.
+The browser half of [Pyctures](https://github.com/johnwylie70/pyctures) ([try it in your browser](https://www.circuitry.dev/pyctures)): Python 2D and 3D graphics on any web page. Python runs in the visitor's browser with [Pyodide](https://pyodide.org), loaded from its official CDN.
 
 ```html
 <div data-pyctures-src="scene.py"></div>

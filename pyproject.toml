@@ -35,7 +35,7 @@ dependencies = []
 test = ["pytest>=7", "playwright>=1.40"]
 
 [project.urls]
-Homepage = "https://github.com/johnwylie70/pyctures"
+Homepage = "https://www.circuitry.dev/pyctures"
 Documentation = "https://github.com/johnwylie70/pyctures/tree/main/docs"
 Source = "https://github.com/johnwylie70/pyctures"
 Issues = "https://github.com/johnwylie70/pyctures/issues"

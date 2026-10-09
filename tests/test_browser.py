@@ -3,6 +3,7 @@
 Needs Playwright:  pip install playwright && playwright install chromium
 Screenshots land in tests/screenshots/.
 """
+import shutil
 import time
 import urllib.request
 
@@ -273,6 +274,8 @@ def _doc_programs():
 def test_docs_python_runs(browser, pyctures_run, tmp_path, name, code):
     scene = tmp_path / "scene.py"
     scene.write_text(code)
+    if "textures/" in code:   # a block that loads a picture uses the examples' own
+        shutil.copytree(EXAMPLES / "textures", tmp_path / "textures")
     p = pyctures_run(scene)
     w = Watched(browser, p.url)
     w.check("docs-%s.png" % name, min_colours=2)

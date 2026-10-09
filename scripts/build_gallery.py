@@ -3,11 +3,13 @@
     .venv/bin/python scripts/build_gallery.py            # -> site/gallery/
     .venv/bin/python scripts/build_gallery.py --shots    # also take the card pictures (needs Playwright)
     .venv/bin/python scripts/build_gallery.py --gif      # also record docs/images/gallery.gif (needs ffmpeg)
+    .venv/bin/python scripts/build_gallery.py --readme   # also take the README's pictures of its examples
 
 The pages are plain HTML with scenes put in inline (data-pyctures-src), so the
 gallery is itself built with `pyctures build`, the way any website would be.
 """
 import argparse
+import re
 import functools
 import html
 import http.server
@@ -21,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 import pyctures  # noqa: E402
-from pyctures.build import build  # noqa: E402
+from pyctures.build import build, scene_images  # noqa: E402
 
 EXAMPLES = ROOT / "examples"
 REPO = "https://github.com/johnwylie70/pyctures"
@@ -35,6 +37,7 @@ SCENES = [
     ("cube_spiral.py", "Cube Spiral", "400 cubes in a rainbow spiral, turning.", "Drag to look around."),
     ("cube_dodge.py", "Cube Dodge", "A 3D game with shadows, fog and the keyboard.", "Arrow keys or drag. Dodge the red blocks."),
     ("bouncing_balls.py", "Bouncing Balls", "A 2D animation with trails and hsl() colours.", "Click or tap to add a ball."),
+    ("textured_cube.py", "Textured Cube", "A picture from a file, wrapped round a turning crate.", "Drag to turn it."),
     ("torus_knot.py", "Torus Knot", "One shape, lit, turning.", "Drag to look around it."),
     ("live_chart.py", "Live Chart", "A line chart of a made-up sensor, updating as you watch.", "Move the mouse over it to read a value."),
     ("wave_grid.py", "Wave Grid", "225 cubes rising and falling like water.", "Drag to look around."),
@@ -169,6 +172,9 @@ def footer():
 def stage(folder):
     for name, title, what, how in SCENES:
         shutil.copyfile(EXAMPLES / name, folder / name)
+        for key, image in scene_images(EXAMPLES / name, (EXAMPLES / name).read_text(encoding="utf-8")):
+            (folder / key).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(image, folder / key)
         (folder / (Path(name).stem + ".html")).write_text(scene_page(name, title, what, how), encoding="utf-8")
     (folder / "index.html").write_text(index_page(), encoding="utf-8")
 
@@ -245,11 +251,43 @@ def gif(out, target, seconds=3.0, fps=15):
     print("Recorded %s (%d KB)" % (target.relative_to(ROOT), target.stat().st_size // 1024))
 
 
+def readme_stills():
+    """A still of what each of the README's examples draws, beside its code."""
+    from playwright.sync_api import sync_playwright
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    hello = re.search(r"## A first scene.*?```python\n(.*?)```", readme, re.S).group(1)
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        (tmp / "hello.py").write_text(hello, encoding="utf-8")
+        stills = [("readme-hello", tmp / "hello.py"),
+                  ("readme-textured-cube", EXAMPLES / "textured_cube.py"),
+                  ("readme-from-javascript", EXAMPLES / "from_javascript_3d.py")]
+        for name, scene in stills:
+            build(scene, tmp / "site" / name, say=lambda *a: None)
+        server = Serve(tmp / "site")
+        try:
+            with sync_playwright() as p:
+                b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+                for name, _ in stills:
+                    page = b.new_page(viewport={"width": 640, "height": 360}, device_scale_factor=2)
+                    page.goto(server.url + name + "/index.html")
+                    page.wait_for_selector('[data-pyctures-status="running"]', timeout=120000)
+                    page.wait_for_timeout(2500)
+                    target = ROOT / "docs" / "images" / (name + ".jpg")
+                    page.screenshot(path=str(target), type="jpeg", quality=85)
+                    page.close()
+                    print("  %s" % target.relative_to(ROOT))
+                b.close()
+        finally:
+            server.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("-o", "--out", default=str(ROOT / "site" / "gallery"))
     parser.add_argument("--shots", action="store_true", help="take the card pictures")
     parser.add_argument("--gif", action="store_true", help="record docs/images/gallery.gif")
+    parser.add_argument("--readme", action="store_true", help="take the README's pictures of its examples")
     args = parser.parse_args()
     out = Path(args.out).resolve()
     if out.exists():
@@ -271,6 +309,8 @@ def main():
         shots(out)
     if args.gif:
         gif(out, ROOT / "docs" / "images" / "gallery.gif")
+    if args.readme:
+        readme_stills()
 
 
 if __name__ == "__main__":

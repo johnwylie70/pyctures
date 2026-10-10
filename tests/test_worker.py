@@ -87,6 +87,8 @@ def clicked(e):
     clicks += 1
     print("clicked", clicks, e.x > 0)
 canvas.add_event_listener("click", clicked)
+await ctx.measure_text("x").width
+print("ready")
 def draw():
     ctx.fill_style = "rgb(0, 128, 255)"
     ctx.fill_rect(0, 0, width, height)
@@ -96,11 +98,22 @@ def draw():
     logs = []
     w.page.on("console", lambda m: logs.append(m.text))
     w.wait_running()
-    end = time.time() + 15
-    while time.time() < end and not any(t.startswith("rejected") for t in logs):
-        w.page.wait_for_timeout(200)
+
+    def wait_for_line(start, seconds=15):
+        end = time.time() + seconds
+        while time.time() < end and not any(t.startswith(start) for t in logs):
+            w.page.wait_for_timeout(50)
+        assert any(t.startswith(start) for t in logs), f"no {start!r} line in {seconds}s:\n" + "\n".join(logs)
+
+    # A click sent before the page has added the listener has nothing to hear
+    # it, and the awaits above take a while under load. Printing after
+    # add_event_listener is not enough: output is shown at once, but drawing
+    # commands (the listener is one) wait a refresh or two in the frame queue.
+    # A read is answered only once the page has run everything before it, so
+    # "ready" after a read means the listener is there.
+    wait_for_line("ready")
     w.page.mouse.click(200, 200)
-    w.page.wait_for_timeout(600)
+    wait_for_line("clicked")
     text = "\n".join(logs)
     assert "width True" in text
     assert "promise 42" in text

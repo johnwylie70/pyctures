@@ -187,6 +187,7 @@ bullets = []
 score = 0
 lives = 3
 safe = 0                        # seconds in which nothing can hurt the ship
+held = 0                        # seconds the mouse or a finger has been down
 
 def add_rock(x, y, size):
     rock = Sprite(draw_rock, x, y, size=size)
@@ -219,20 +220,26 @@ def shoot():
     bullets.append(bullet)
 
 def on_mouse_down(x, y):
+    global held
+    held = 0
     if lives == 0:
         new_game()
     else:
+        ship.angle = ship.angle_to(x, y)
         shoot()
 
 def steer(dt):
+    global held
     ship.spin = 0
     if "ArrowLeft" in keys: ship.spin = degrees(-230)
     if "ArrowRight" in keys: ship.spin = degrees(230)
     if "ArrowUp" in keys: ship.push(300 * dt)
     if " " in pressed: shoot()
+    # A tap is over before the engine starts. Keep holding and the ship flies to your finger.
     if mouse.down:
+        held += dt
         ship.angle = ship.angle_to(mouse)
-        ship.push(300 * dt)
+        if held > 0.18: ship.push(300 * dt)
     ship.limit(350)
 
 def update(dt):
@@ -287,7 +294,8 @@ new_game()
 
 - `safe` counts down the seconds in which nothing can hurt the ship. Without it, a new ship could appear inside a rock and be lost at once. While it is safe the ship blinks: `ship.visible` is switched on and off.
 - A new wave of three rocks starts whenever the list of rocks is empty. They start on the left edge, away from the ship.
-- On a phone or with a mouse, the ship turns to face your finger with `ship.angle_to(mouse)` and flies towards it. `on_mouse_down` is called once for each tap, so each tap shoots.
+- On a phone or with a mouse, `on_mouse_down` is called once for each press. It turns the ship to face the press with `ship.angle_to(x, y)` and shoots, so a tap aims and fires.
+- `held` counts the seconds the mouse or a finger has been down. A tap is over in about a tenth of a second, so the engine, which waits for 0.18, never starts. Keep holding a moment longer and the ship flies towards your finger, turning to follow it with `ship.angle_to(mouse)`.
 - When the lives run out, the same tap or the space bar starts a new game.
 
 This is the example `space_rocks.py`. Three more small games are written the same way: `bat_and_ball.py`, `brick_breaker.py` and `snake.py`.

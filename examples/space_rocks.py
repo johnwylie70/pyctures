@@ -1,5 +1,5 @@
 # Space Rocks: steer a ship, shoot the rocks, and do not get hit. A rock breaks in two when it is shot.
-# Use: left and right turn, up fires the engine, space shoots. Or hold the mouse or a finger to fly towards it; every tap shoots.
+# Use: left and right turn, up fires the engine, space shoots. Or tap to shoot, and hold to fly towards your finger.
 # Try changing: 3, the rocks in a wave; 500, the speed of a bullet; 7, the sides of a rock.
 #
 # Run it:   pyctures run space_rocks.py
@@ -17,6 +17,7 @@ bullets = []
 score = 0
 lives = 3
 safe = 0                        # seconds in which nothing can hurt the ship
+held = 0                        # seconds the mouse or a finger has been down
 
 def add_rock(x, y, size):
     rock = Sprite(draw_rock, x, y, size=size)
@@ -49,20 +50,26 @@ def shoot():
     bullets.append(bullet)
 
 def on_mouse_down(x, y):
+    global held
+    held = 0
     if lives == 0:
         new_game()
     else:
+        ship.angle = ship.angle_to(x, y)
         shoot()
 
 def steer(dt):
+    global held
     ship.spin = 0
     if "ArrowLeft" in keys: ship.spin = degrees(-230)
     if "ArrowRight" in keys: ship.spin = degrees(230)
     if "ArrowUp" in keys: ship.push(300 * dt)
     if " " in pressed: shoot()
+    # A tap is over before the engine starts. Keep holding and the ship flies to your finger.
     if mouse.down:
+        held += dt
         ship.angle = ship.angle_to(mouse)
-        ship.push(300 * dt)
+        if held > 0.18: ship.push(300 * dt)
     ship.limit(350)
 
 def update(dt):

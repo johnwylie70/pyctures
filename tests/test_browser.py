@@ -4,6 +4,7 @@ Needs Playwright:  pip install playwright && playwright install chromium
 Screenshots land in tests/screenshots/.
 """
 import json
+import math
 import shutil
 import time
 import urllib.request
@@ -306,8 +307,8 @@ def draw():
 class Driven:
     """A scene in a touch screen's page, with real input sent to it."""
 
-    def __init__(self, browser, url):
-        self.context = browser.new_context(viewport={"width": 800, "height": 600}, has_touch=True)
+    def __init__(self, browser, url, size=(800, 600)):
+        self.context = browser.new_context(viewport={"width": size[0], "height": size[1]}, has_touch=True)
         self.page = self.context.new_page()
         self.errors = []
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
@@ -411,6 +412,102 @@ def test_build_input_reaches_python(browser, static_server, tmp_path):
     build(scene, out, say=lambda *a: None)
     d = Driven(browser, static_server(out))
     _drive_input(d)
+    d.context.close()
+
+
+# ---------------------------------------------------------------- Space Rocks, played by pointer
+
+# Added to the end of the game: its numbers for the test, and a ship no rock can end a check on.
+ROCKS_PROBE = """
+import json
+shots = 0
+shoot_once = shoot
+def shoot():
+    global shots
+    shots += 1
+    shoot_once()
+draw_game = draw
+def draw():
+    global safe
+    safe = 1e9
+    draw_game()
+    js.window.probe = json.dumps({"x": ship.x, "y": ship.y, "vx": ship.vx, "vy": ship.vy, "angle": ship.angle, "shots": shots, "lives": lives})
+"""
+
+
+def _apart(a, b):
+    """How far apart two angles are, the short way round."""
+    return abs(math.atan2(math.sin(a - b), math.cos(a - b)))
+
+
+def _speed(s):
+    return math.hypot(s["vx"], s["vy"])
+
+
+@pytest.mark.parametrize("how", ["mouse", "finger"])
+def test_space_rocks_a_tap_shoots_and_a_hold_flies(browser, pyctures_run, tmp_path, how):
+    scene = tmp_path / "space_rocks.py"
+    scene.write_text((EXAMPLES / "space_rocks.py").read_text() + ROCKS_PROBE)
+    # the mouse in a window, a finger on a phone-size touch screen
+    d = Driven(browser, pyctures_run(scene).url, size=(1000, 700) if how == "mouse" else (390, 844))
+    page = d.page
+    if how == "mouse":
+        def down(x, y):
+            page.mouse.move(x, y)
+            page.mouse.down()
+        move, up = (lambda x, y: page.mouse.move(x, y, steps=4)), page.mouse.up
+    else:
+        down = lambda x, y: d.touch("touchStart", (1, x, y))
+        move = lambda x, y: d.touch("touchMove", (1, x, y))
+        up = lambda: d.touch("touchEnd")
+    box = page.evaluate("(() => { const r = document.querySelector('canvas').getBoundingClientRect(); return [r.x, r.y] })()")
+    at = lambda x, y: (box[0] + x, box[1] + y)
+    s0 = d.probe()
+    assert _speed(s0) == 0
+
+    # a tap, down and up within 80 ms: one shot, the ship turned to it, and no engine
+    down(*at(s0["x"] + 90, s0["y"] + 50))
+    page.wait_for_timeout(80)
+    up()
+    s1 = d.probe()
+    assert s1["shots"] == s0["shots"] + 1
+    assert _apart(s1["angle"], math.atan2(50, 90)) < 0.02
+    assert _speed(s1) == 0 and (s1["x"], s1["y"]) == (s0["x"], s0["y"])
+
+    # taps as long as a finger's on glass: each shoots, none starts the engine (it waits 0.18 s)
+    for ms in (60, 100, 130):
+        down(*at(s0["x"] + 90, s0["y"] + 50))
+        page.wait_for_timeout(ms)
+        up()
+        page.wait_for_timeout(150)
+    s = d.probe()
+    assert _speed(s) == 0 and s["shots"] == s1["shots"] + 3, s
+    s1 = s
+
+    # a hold of a second, up and to the left: one shot at its start, and the ship flies that way
+    bx, by = s1["x"] - 150, s1["y"] - 200
+    down(*at(bx, by))
+    page.wait_for_timeout(1000)
+    s2 = json.loads(page.evaluate("window.probe"))
+    to_b = math.atan2(by - s1["y"], bx - s1["x"])
+    along = (s2["x"] - s1["x"]) * math.cos(to_b) + (s2["y"] - s1["y"]) * math.sin(to_b)
+    assert s2["shots"] == s1["shots"] + 1
+    assert along > 30 and _speed(s2) > 100 and _apart(math.atan2(s2["vy"], s2["vx"]), to_b) < 0.1, (along, s2)
+
+    # the pointer moves while it is held: the ship turns to follow, and does not shoot again
+    cx, cy = s1["x"] + 100, s1["y"] + 250
+    move(*at(cx, cy))
+    page.wait_for_timeout(250)
+    s3 = json.loads(page.evaluate("window.probe"))
+    assert _apart(s3["angle"], math.atan2(cy - s3["y"], cx - s3["x"])) < 0.15, s3
+    assert _apart(s3["angle"], s2["angle"]) > 1 and s3["shots"] == s2["shots"]
+
+    # let go: the engine stops and the ship drifts on
+    up()
+    s4 = d.probe()
+    s5 = d.probe()
+    assert (s5["vx"], s5["vy"]) == (s4["vx"], s4["vy"]) and _speed(s5) > 0 and s5["lives"] == 3
+    assert not d.errors, d.errors
     d.context.close()
 
 

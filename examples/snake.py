@@ -1,6 +1,6 @@
 # Snake: eat the apples and grow, without running into a wall or yourself. It is played on a grid of squares, and your best score is kept.
 # Use: the arrow keys turn the snake. Or tap the side of its head you want it to turn to.
-# Try changing: SQUARE, the size of a square; 0.12, the seconds between steps (smaller is faster); the colours in draw().
+# Try changing: SQUARE, the size of a square; 0.15, the seconds between steps (smaller is faster); the colours in draw().
 #
 # Run it:   pyctures run snake.py
 
@@ -16,9 +16,10 @@ timer = 0
 score = 0
 best = load("best", 0)          # the best score saved last time, or 0 the first time
 alive = True
+waiting = True                  # nothing moves until the first key or tap
 
 def new_game():
-    global columns, rows, snake, going, turn, score, alive
+    global columns, rows, snake, going, turn, score, alive, waiting
     columns = int(width // SQUARE)
     rows = int(height // SQUARE)
     y = rows // 2
@@ -27,6 +28,7 @@ def new_game():
     turn = going
     score = 0
     alive = True
+    waiting = True
     move_apple()
 
 # Try squares until one is free.
@@ -43,16 +45,20 @@ def turn_to(x, y):
         turn = (x, y)
 
 def on_key_down(key):
+    global waiting
     if key == "ArrowLeft": turn_to(-1, 0)
     if key == "ArrowRight": turn_to(1, 0)
     if key == "ArrowUp": turn_to(0, -1)
     if key == "ArrowDown": turn_to(0, 1)
+    if key.startswith("Arrow"): waiting = False
     if key == " " and not alive: new_game()
 
 def on_mouse_down(x, y):
+    global waiting
     if not alive:
         new_game()
         return
+    waiting = False
     # How far the tap is from the middle of the head, across and down.
     across = x - (snake[0][0] + 0.5) * SQUARE
     down = y - (snake[0][1] + 0.5) * SQUARE
@@ -81,10 +87,10 @@ def step():
 
 def update(dt):
     global timer
-    if not alive:
+    if not alive or waiting:
         return
     timer += dt
-    if timer >= 0.12:           # a step every 0.12 seconds: smaller is faster
+    if timer >= 0.15:           # a step every 0.15 seconds: smaller is faster
         timer = 0
         step()
 
@@ -100,6 +106,8 @@ def draw():
     square(snake[0][0], snake[0][1], "palegreen")
     text(f"Score {score}", 12, 30, "white", 20, "left")
     text(f"Best {best}", width - 12, 30, "gold", 20, "right")
+    if waiting:
+        text("Press an arrow key or tap to start", width / 2, height / 2 + 60, "white", 18, "centre")
     if not alive:
         text("Game over", width / 2, height / 2, "white", 32, "centre")
         text("Tap or press space to play again", width / 2, height / 2 + 40, "white", 18, "centre")

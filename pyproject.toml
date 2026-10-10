@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyctures"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python 2D and 3D graphics, drawn in your web browser. Games, animations, charts and 3D scenes."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -39,6 +39,7 @@ Homepage = "https://www.circuitry.dev/pyctures"
 Documentation = "https://github.com/johnwylie70/pyctures/tree/main/docs"
 Source = "https://github.com/johnwylie70/pyctures"
 Issues = "https://github.com/johnwylie70/pyctures/issues"
+Changelog = "https://github.com/johnwylie70/pyctures/blob/main/CHANGELOG.md"
 
 [project.scripts]
 pyctures = "pyctures.cli:main"

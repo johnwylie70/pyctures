@@ -7,8 +7,6 @@ A ball that falls, bounces off the floor and walls, and slows down a little with
 ## 1. A ball that moves
 
 ```python
-import math
-
 x, y = 100, 100      # where the ball is
 vx, vy = 180, 0      # how fast it moves, in points per second
 r = 24               # its radius
@@ -19,12 +17,8 @@ def update(dt):
     y += vy * dt
 
 def draw():
-    ctx.fill_style = "#16213e"
-    ctx.fill_rect(0, 0, width, height)
-    ctx.fill_style = "orange"
-    ctx.begin_path()
-    ctx.arc(x, y, r, 0, math.tau)
-    ctx.fill()
+    background("#16213e")
+    circle(x, y, r, "orange")
 ```
 
 Run it and the ball slides off to the right and away. Each frame, `update(dt)` moves it by its speed times `dt`, the time since the last frame. `global x, y` lets the function change the variables made at the top.
@@ -34,8 +28,6 @@ Run it and the ball slides off to the right and away. Each frame, `update(dt)` m
 Gravity is a steady push downwards: add to `vy` every frame. A bounce is a speed turned round: when the ball reaches the floor, put it back on the floor and flip `vy`. Multiplying by 0.8 rather than 1 loses a little speed on each bounce.
 
 ```python
-import math
-
 x, y = 100, 100
 vx, vy = 180, 0
 r = 24
@@ -65,12 +57,8 @@ def on_mouse_down(mx, my):
     vx, vy = 300, -500           # throw it up and to the right
 
 def draw():
-    ctx.fill_style = "#16213e"
-    ctx.fill_rect(0, 0, width, height)
-    ctx.fill_style = "orange"
-    ctx.begin_path()
-    ctx.arc(x, y, r, 0, math.tau)
-    ctx.fill()
+    background("#16213e")
+    circle(x, y, r, "orange")
     ctx.fill_style = "white"
     ctx.font = "16px sans-serif"
     ctx.fill_text("Tap or click to throw the ball", 12, 24)
@@ -83,15 +71,13 @@ def draw():
 With many balls, each one needs its own numbers. A small class keeps them together.
 
 ```python
-import math, random
-
 class Ball:
     def __init__(self, x, y):
         self.x, self.y = x, y
-        self.vx = random.uniform(-250, 250)
-        self.vy = random.uniform(-600, -200)
-        self.r = random.uniform(8, 26)
-        self.colour = f"hsl({random.randint(0, 360)}, 85%, 60%)"
+        self.vx = random(-250, 250)
+        self.vy = random(-600, -200)
+        self.r = random(8, 26)
+        self.colour = f"hsl({random(360)}, 85%, 60%)"
 
     def update(self, dt):
         self.vy += 900 * dt
@@ -105,12 +91,9 @@ class Ball:
             self.vx *= -0.8
 
     def draw(self):
-        ctx.fill_style = self.colour
-        ctx.begin_path()
-        ctx.arc(self.x, self.y, self.r, 0, math.tau)
-        ctx.fill()
+        circle(self.x, self.y, self.r, self.colour)
 
-balls = [Ball(random.uniform(50, 350), 100) for _ in range(20)]
+balls = [Ball(random(50, 350), 100) for _ in range(20)]
 
 def on_mouse_down(x, y):
     for _ in range(10):
@@ -121,8 +104,7 @@ def update(dt):
         ball.update(dt)
 
 def draw():
-    ctx.fill_style = "#16213e"
-    ctx.fill_rect(0, 0, width, height)
+    background("#16213e")
     for ball in balls:
         ball.draw()
     ctx.fill_style = "white"
@@ -131,6 +113,51 @@ def draw():
 ```
 
 Add `?measure=1` to the page's address and keep adding balls to see how many your device draws smoothly.
+
+## The same thing as a loop
+
+The ball of step 2 can also be written as one loop, with no `update` and no `draw`. `await frame()` waits for the screen's next refresh, so each pass of the loop is one frame.
+
+```python
+import time
+
+x, y = 100, 100
+vx, vy = 180, 0
+r = 24
+gravity = 900
+bounce = 0.8
+last = time.monotonic()
+
+while True:
+    await frame()                # wait for the screen
+    now = time.monotonic()
+    dt = now - last              # the time since the last frame
+    last = now
+
+    if mouse.down:               # hold to carry the ball, let go to throw it
+        x, y = mouse.x, mouse.y
+        vx, vy = 300, -500
+    vy += gravity * dt
+    x += vx * dt
+    y += vy * dt
+    if y > height - r:
+        y = height - r
+        vy = -vy * bounce
+        vx *= 0.99
+    if x < r:
+        x = r
+        vx = -vx * bounce
+    if x > width - r:
+        x = width - r
+        vx = -vx * bounce
+
+    background("#16213e")
+    circle(x, y, r, "orange")
+```
+
+There is no `global` line: the loop is at the top level of the file, where the variables live. The loop reads `mouse` itself, in place of `on_mouse_down`.
+
+`update` and `draw` suit games, where things happen in any order and the `on_` functions tell you about them. A loop suits a drawing made step by step, or a sequence: first this, then wait, then that. `await frame()` is also how a scene stays in step with the screen: everything drawn in one pass appears together at the next refresh, so nothing is ever shown half drawn.
 
 ## Try this
 

@@ -15,6 +15,8 @@ Python drawing has the full set of JavaScript graphics functions: the web's 2D c
 | `const ctx = canvas.getContext("2d")` | Not needed: `ctx` and `canvas` are ready |
 | `function animate() { …; requestAnimationFrame(animate) }` | `def draw():` (and `def update(dt):` for movement): called every frame for you |
 | `canvas.addEventListener("click", (e) => { … })` | `def clicked(e): …` then `canvas.add_event_listener("click", clicked)` |
+| `keydown`, `pointerdown`, `pointermove`, `wheel` and touch listeners | Not needed: read `keys`, `pressed`, `mouse`, `touches` and `pinch`, or define `on_key_down(key, code)`, `on_mouse_down(x, y, button)`, `on_touch_start(touch)`, `on_wheel(amount)`, `on_pinch(scale, change)` ([input](program-shape.md#keyboard-mouse-and-touch-input)) |
+| `e.shiftKey`, `e.code === "KeyW"` | `keys.shift`, `"KeyW" in keys.codes` |
 | `const w = ctx.measureText("hi").width` (a value the page works out) | `w = await ctx.measure_text("hi").width` ([reading a value back](program-shape.md#reading-a-value-back-with-await)) |
 | `Math.PI`, `Math.sin(a)`, `Math.random()` | `math.pi`, `math.sin(a)`, `random.random()`, after `import math, random` |
 | `for (let i = 0; i < 10; i++)` | `for i in range(10):` |

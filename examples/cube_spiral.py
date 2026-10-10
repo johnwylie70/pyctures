@@ -1,4 +1,8 @@
 # Cube Spiral: 400 cubes in a rainbow spiral, turning.
+# Try changing: count, how many cubes; 0.25, the size of a cube.
+#
+# Run it:   pyctures run cube_spiral.py
+
 import math, random
 
 renderer = THREE.WebGLRenderer(canvas=canvas, antialias=True)

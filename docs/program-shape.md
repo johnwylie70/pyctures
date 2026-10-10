@@ -17,8 +17,16 @@ These are ready in every file, with no import:
 | `width`, `height` | The size of the canvas, in screen points. They update when the canvas is resized. |
 | `pixel_ratio` | How many real pixels make one screen point (2 or 3 on most phones). |
 | `frame`, `flush`, `sleep` | Used with `await` to wait for the next frame, send the drawing now, or pause. |
+| `vsync` | Another name for `frame`: `await vsync()`. |
 | `keys`, `mouse` | What is pressed right now. |
-| `Sprite`, `load_image` | Moving pictures, and loading an image. |
+| `pressed`, `released` | The keys that went down, and came up, since the last frame. |
+| `touches`, `pinch` | Every finger that is down, and two fingers as a zoom. |
+| `degrees` | An angle said in degrees: `ship.angle = degrees(90)`. |
+| `background`, `circle`, `ellipse`, `rect`, `triangle`, `polygon`, `star`, `line`, `text`, `picture` | Plain drawing, one call each. See [the quick way](drawing-2d.md#the-quick-way-plain-functions). |
+| `random`, `pick` | A number, or one thing from a list, by chance: `random(1, 6)`, `pick(["red", "gold"])`. |
+| `Sprite`, `load_image` | Moving pictures that can tell when they touch, and loading an image. See [Sprites](drawing-2d.md#sprites). |
+| `remove` | Takes a thing out of a list: `remove(rocks, rock)`. |
+| `save`, `load` | Keep a value for the next time the program runs: `save("best", 120)`, `load("best", 0)`. See [Saved values](saved-values.md). |
 | `Event` | The type of the event a callback receives. |
 | `js` | Everything else the page has, for when you need it. |
 
@@ -85,6 +93,10 @@ while True:
 
 `await` works at the top level of the file, with no `async def` needed.
 
+`await vsync()` is another name for `await frame()`: the same function. Use whichever you prefer. Both wait for the screen's next refresh.
+
+The page never shows a half-drawn frame. Everything you draw before the next `await frame()` or `await vsync()` appears together, at the next refresh. So clear the canvas and draw the new picture in the same frame, as the loop above does, and nothing flickers.
+
 **Every `while True:` loop must `await frame()`** (or `await sleep(...)`). A loop that never waits never lets the canvas draw, and the program looks frozen. See [Tips and limits](tips.md).
 
 `await sleep(seconds)` waits for that long, which is handy for slow, step-by-step programs:
@@ -149,17 +161,83 @@ def draw():
     ctx.fill_rect(x - 15, y - 15, 30, 30)
 ```
 
+`mouse` has more to read:
+
+| Name | What it is |
+|---|---|
+| `mouse.x`, `mouse.y` | Where the pointer is, in points from the top left of the scene. |
+| `mouse.down` | `True` while a button or a finger is pressed. |
+| `mouse.button` | Which button is down: `"left"`, `"middle"` or `"right"`. `None` when none is. A finger is `"left"`. |
+| `mouse.inside` | `True` while the pointer is over the scene. |
+| `mouse.dx`, `mouse.dy` | How far the pointer moved since the last frame. |
+| `mouse.wheel` | How far the wheel turned since the last frame. Rolling down is positive. One click of a mouse wheel is about 100. |
+
+A scene that uses the pointer gets the right button too: no menu opens over it.
+
+`keys` also says which of the modifier keys are held, with no name to remember:
+
+| Name | What it is |
+|---|---|
+| `keys.shift`, `keys.ctrl`, `keys.alt`, `keys.meta` | `True` while that key is held. `meta` is the Command key on a Mac and the Windows key on a PC. |
+| `keys.codes` | The keys held, by their place on the keyboard: `"KeyW" in keys.codes`. See [Keys by their place](#keys-by-their-place-wasd-on-any-keyboard). |
+
+`print(keys)` and `print(mouse)` show everything they hold, which helps when a key or a button does not do what you expect.
+
+### Once for each press: `pressed` and `released`
+
+`keys` says a key is down for as long as it is held. To do something once for each press, such as a jump or a shot, use `pressed`: the set of keys that went down since the last frame. `released` is the set of keys that came up.
+
+| You want it to happen | Use |
+|---|---|
+| Once for each press | `" " in pressed` in `update`, or the function `on_key_down(key)` |
+| While the key is held, every frame | `" " in keys` in `update` |
+| While the key is held, at the speed a held key types | the function `on_key_repeat(key)` |
+
+```python
+y = 0      # how high the box is above the ground
+vy = 0     # its speed upwards
+
+def update(dt):
+    global y, vy
+    if " " in pressed and y == 0:
+        vy = 500                      # one jump for each press of the space bar
+    vy -= 1200 * dt
+    y = max(0, y + vy * dt)
+
+def draw():
+    ctx.fill_style = "#1b2a3a"
+    ctx.fill_rect(0, 0, width, height)
+    ctx.fill_style = "seagreen"
+    ctx.fill_rect(0, height - 40, width, 40)
+    ctx.fill_style = "gold"
+    ctx.fill_rect(width / 2 - 20, height - 80 - y, 40, 40)
+    ctx.fill_style = "white"
+    ctx.fill_text("Press space to jump", 10, 20)
+```
+
+Hold the space bar down and the box jumps once. With `" " in keys` in its place it would jump again each time it landed.
+
+`pressed`, `released`, `mouse.dx`, `mouse.dy` and `mouse.wheel` tell you what happened since the last frame. They are set at the start of each frame and stay the same all through it, so they read the same in `update`, in `draw` and after an `await frame()`.
+
 ### When something happens: the `on_` functions
 
 Define any of these and they are called when the event happens:
 
 | Function | Called when |
 |---|---|
-| `on_key_down(key)` | A key is pressed. `key` is its name, as in `keys`. |
-| `on_key_up(key)` | A key is let go. |
-| `on_mouse_down(x, y)` | The mouse button or a finger goes down. |
+| `on_key_down(key, code)` | A key is pressed. `key` is its name, as in `keys`. `code` is its place on the keyboard. |
+| `on_key_up(key, code)` | A key is let go. |
+| `on_key_repeat(key, code)` | A key that is held down repeats, as it does when you type. |
+| `on_mouse_down(x, y, button)` | The mouse button or a finger goes down. `button` is `"left"`, `"middle"` or `"right"`. |
 | `on_mouse_move(x, y)` | The pointer moves. |
-| `on_mouse_up(x, y)` | The button or finger comes up. |
+| `on_mouse_up(x, y, button)` | The button or finger comes up. |
+| `on_touch_start(touch)` | A finger or a mouse button goes down. See [Every finger](#every-finger-touches). |
+| `on_touch_move(touch)` | A finger that is down moves. |
+| `on_touch_end(touch, cancelled)` | A finger comes up. |
+| `on_wheel(amount)` | The wheel turns. Rolling down is positive. |
+| `on_pinch(scale, change)` | Two fingers move together or apart. See [Zooming](#zooming-pinch-and-the-wheel). |
+
+A function may leave out the arguments it does not need: `def on_key_down(key):` and `def on_mouse_down(x, y):` are fine.
 
 ```python
 dots = []
@@ -183,7 +261,101 @@ def draw():
     ctx.fill_text("Click to add dots, press c to clear", 10, 20)
 ```
 
-Holding a key down does not repeat `on_key_down`. Use `keys` for things that should keep happening while a key is held.
+Holding a key down does not repeat `on_key_down`. Use `keys` for things that should keep happening while a key is held, and `on_key_repeat` for a key that should repeat as it does in a text box, such as Backspace.
+
+The `on_` functions are called just before `update`, with everything that happened since the last frame.
+
+### Keys by their place: WASD on any keyboard
+
+A key's name is the letter it types, and that depends on the keyboard. The key a British or American keyboard calls W types Z on a French one. A key's code is its place on the keyboard and is the same everywhere: `"KeyW"`, `"KeyA"`, `"KeyS"`, `"KeyD"`, `"Space"`, `"ArrowLeft"`, `"Digit1"`, `"ShiftLeft"`. `keys.codes` is the set of codes held, and `on_key_down` is given the code after the name.
+
+```python
+x, y = 200, 150
+
+def update(dt):
+    global x, y
+    if "KeyW" in keys.codes: y -= 200 * dt
+    if "KeyS" in keys.codes: y += 200 * dt
+    if "KeyA" in keys.codes: x -= 200 * dt
+    if "KeyD" in keys.codes: x += 200 * dt
+
+def on_key_down(key, code):
+    global x, y
+    if code == "Space":
+        x, y = width / 2, height / 2
+
+def draw():
+    ctx.fill_style = "#222"
+    ctx.fill_rect(0, 0, width, height)
+    ctx.fill_style = "orange"
+    ctx.fill_rect(x - 15, y - 15, 30, 30)
+```
+
+### Every finger: `touches`
+
+`mouse` follows one pointer: the first finger to go down. `touches` is a list of every finger that is down right now. A pressed mouse button is in the list too, so one piece of code works on a phone and on a computer. Each touch has:
+
+| Name | What it is |
+|---|---|
+| `touch.x`, `touch.y` | Where it is, in points, like `mouse.x`. |
+| `touch.start_x`, `touch.start_y` | Where it went down. |
+| `touch.dx`, `touch.dy` | How far it moved since the last frame. |
+| `touch.id` | A number that tells it from the others. |
+| `touch.type` | `"touch"` for a finger, `"mouse"` or `"pen"`. |
+
+This scene paints with every finger at once, each in its own colour:
+
+```python
+colours = ["crimson", "royalblue", "seagreen", "orange", "purple"]
+count = 0
+
+ctx.fill_style = "white"
+ctx.fill_rect(0, 0, width, height)
+
+def on_touch_start(touch):
+    global count
+    touch.colour = colours[count % len(colours)]
+    count += 1
+
+def update(dt):
+    ctx.line_width = 8
+    ctx.line_cap = "round"
+    for touch in touches:
+        ctx.stroke_style = touch.colour
+        ctx.begin_path()
+        ctx.move_to(touch.x - touch.dx, touch.y - touch.dy)   # where it was last frame
+        ctx.line_to(touch.x, touch.y)
+        ctx.stroke()
+```
+
+A touch is the same object from the moment it goes down until it comes up, so a scene can keep things of its own on it, as `touch.colour` is kept here. `on_touch_end(touch, cancelled)` is given it one last time. `cancelled` is `True` when the device took the touch away, for example for a gesture of its own, so it should not count as a tap.
+
+### Zooming: `pinch` and the wheel
+
+Two fingers moving apart or together is a pinch. `pinch.scale` is 1 when the second finger goes down, 2 when the fingers are twice as far apart, and 0.5 when they are half as far. `pinch.change` is how much the scale changed since the last frame, so multiplying by it every frame is all a zoom needs. `pinch.x` and `pinch.y` are the point between the fingers. A pinch on a trackpad sets the same values.
+
+```python
+zoom = 1
+
+def update(dt):
+    global zoom
+    zoom *= pinch.change            # two fingers, or a pinch on a trackpad
+    zoom *= 0.999 ** mouse.wheel    # the mouse wheel: rolling up zooms in
+    zoom = max(0.2, min(5, zoom))
+
+def draw():
+    ctx.fill_style = "#111"
+    ctx.fill_rect(0, 0, width, height)
+    size = 100 * zoom
+    ctx.fill_style = "deepskyblue"
+    ctx.fill_rect(width / 2 - size / 2, height / 2 - size / 2, size, size)
+    ctx.fill_style = "white"
+    ctx.fill_text("zoom %.2f" % zoom, 10, 20)
+```
+
+When no pinch is going on, `pinch.scale` and `pinch.change` are 1. `on_pinch(scale, change)` and `on_wheel(amount)` are called as it happens, if you would rather have a function.
+
+A scene that names the wheel (`mouse.wheel` or `on_wheel`) keeps it: on a web page, the page does not scroll while the pointer is over the scene. Under any other scene the wheel scrolls the page as usual. In the same way, a scene that names `pinch` or `on_pinch` keeps a trackpad's pinch, and the page is not zoomed.
 
 ### Callbacks
 

@@ -11,7 +11,8 @@
  * THE RENDERER keeps a handle table (number -> JavaScript value), replays the
  * commands the Python half (`pyctures/__init__.py`) records, answers reads, and
  * reports input. Fixed handles (they must match the Python half): 1 window,
- * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons.
+ * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons,
+ * 7 plain drawing, 8 saved values.
  *
  * THE PAGE'S MAIN THREAD only draws: Python runs in your own Python (`run`) or
  * in a worker (`build`), so a slow frame, Python's garbage collection or a
@@ -52,6 +53,45 @@ function prop(obj, name) {
     if (c in Object(obj)) return c
   }
   return name
+}
+
+// ---------------------------------------------------------------- saved values
+
+/**
+ * SAVED VALUES: Python's save("best", 120) and load("best", 0). A value is kept as JSON text
+ * in the page's localStorage, one entry for each name, under `pyctures:<the scene>:<name>`, so
+ * two scenes on one site never read each other's and nothing else the page keeps is touched.
+ * Python is handed all of them when a scene starts (`all`), because load() must answer at
+ * once, and sends each save() as a command (`save`). Where the page has no storage (a private
+ * window, a frame that is refused it) or it is full, what is saved is kept here instead, for
+ * as long as the page is open.
+ */
+const KEPT = new Map()
+function savedValues(scene) {
+  const under = `pyctures:${scene}:`
+  return {
+    all() {
+      const out = {}
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith(under)) out[key.slice(under.length)] = localStorage.getItem(key)
+        }
+      } catch (e) { /* no storage */ }
+      for (const [key, kept] of KEPT) if (key.startsWith(under)) out[key.slice(under.length)] = kept
+      return out
+    },
+    save(name, kept) {
+      KEPT.set(under + name, kept)
+      try {
+        localStorage.setItem(under + name, kept)
+      } catch (e) {
+        // No storage, or it is full: the scene carries on, and the value lasts while the page is open.
+        if (!KEPT.warned) console.warn(`save("${name}", …): the browser would not keep it (${(e && e.message) || e}), so it will be forgotten when the page is closed`)
+        KEPT.warned = true
+      }
+    },
+  }
 }
 
 // ---------------------------------------------------------------- images by relative path
@@ -107,13 +147,37 @@ function swapStrings(v, resolve) {
   }
 }
 
+// ---------------------------------------------------------------- what input a scene takes
+
+/** The scene's Python without its comments and strings. */
+const codeOf = (source) => source
+  .replace(/("""|''')[\s\S]*?\1/g, '""')
+  .replace(/(["'])(?:\\.|(?!\1)[^\\\n])*\1/g, '""')
+  .replace(/#.*$/gm, '')
+
 /**
- * The renderer for one canvas. `images`: a function from a string in the
+ * What a scene takes from the pointer, from the names in its code. `wheel`: it
+ * names the wheel (on_wheel, mouse.wheel), so the wheel is the scene's and the
+ * page does not scroll under it. `pinch`: it names the pinch, so a trackpad's
+ * pinch is the scene's and does not zoom the page. `pointer`: it uses the
+ * pointer at all, so a drag stays the scene's when it leaves the canvas and a
+ * right-click is a button, not a menu.
+ */
+export function inputOf(source) {
+  const code = codeOf(source || '')
+  const wheel = /\bon_wheel\b|\bmouse\s*\.\s*wheel\b/.test(code)
+  const pinch = /(?:^|[^.\w])pinch\b|\bon_pinch\b/.test(code)
+  const pointer = wheel || pinch || /\bmouse\b|\bon_mouse|(?:^|[^.\w])touches\b|\bon_touch|\badd(?:EventListener|_event_listener)\b|\bOrbitControls\b/.test(code)
+  return { pointer, wheel, pinch }
+}
+
+/**
+ * The renderer for one canvas. `input`: what the scene takes from the pointer (see inputOf). `images`: a function from a string in the
  * commands to the URL to use instead (see imageResolver), or null. `hooks`: onEvent(event), onSize(size),
  * onApplied({reads, errors, ms, n, timing}), onReads(reads) (a promise has
  * settled), isActive() (has the keyboard).
  */
-export function createRenderer(canvas, { three = null, addons = null, images = null, hooks }) {
+export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, hooks }) {
   const H = new Map()
   let ctx2d = null
   let dpr = 1, cssW = 0, cssH = 0
@@ -123,7 +187,8 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   const glRenderers = [], cameras = []
   let timing = null
   let isGL = false
-  let pointerIsDown = false
+  const takes = input || { pointer: false, wheel: false, pinch: false }
+  const pointersDown = new Set()
 
   function size() {
     dpr = window.devicePixelRatio || 1
@@ -238,6 +303,7 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
     if (h === 2) return 'canvas'
     if (h === 3) return 'THREE'
     if (h === 1) return 'js'
+    if (h === 7) return 'the plain drawing functions'
     const n = obj && obj.constructor && obj.constructor.name
     return n || 'this object'
   }
@@ -323,29 +389,211 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
     for (const cam of cameras) { try { cam.aspect = cssW / cssH; cam.updateProjectionMatrix() } catch (e) { /* not a camera any more */ } }
   }
 
+  // INPUT IS REPORTED, NEVER ASKED FOR. Each event goes to Python with the next
+  // frame, and the Python half keeps `keys`, `mouse`, `touches` and `pinch` from
+  // them (pyctures/__init__.py, `_input`). `m` is the modifier keys held, as bits:
+  // 1 Shift, 2 Control, 4 Alt, 8 Meta.
+  const modifiers = (e) => (e.shiftKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.altKey ? 4 : 0) | (e.metaKey ? 8 : 0)
   function sendInput(e) {
     const k = { type: e.type }
     if (e.type === 'keydown' || e.type === 'keyup') {
       if (!hooks.isActive()) return
-      if (e.repeat) return
-      k.key = e.key; k.code = e.code
+      // A repeat of a held key is sent too: Python tells it from the press by the key being held (on_key_repeat).
+      k.key = e.key; k.code = e.code; k.m = modifiers(e)
+      if (e.repeat) k.r = 1
       if (e.key.indexOf('Arrow') === 0 || e.key === ' ') e.preventDefault()
-    } else {
-      if (e.type === 'pointerdown') { pointerIsDown = true; canvas.focus({ preventScroll: true }) }
-      else if (e.type === 'pointerup') { if (!pointerIsDown) return; pointerIsDown = false }
+    } else if (e.type === 'blur') {
+      if (!hooks.isActive()) return
+    } else if (e.type !== 'pointerleave') {
+      if (e.type === 'pointerdown') {
+        pointersDown.add(e.pointerId)
+        canvas.focus({ preventScroll: true })
+        // A drag that leaves the scene is still the scene's.
+        if (takes.pointer) { try { canvas.setPointerCapture(e.pointerId) } catch (e2) { /* a pointer that has already gone */ } }
+        k.m = modifiers(e)
+      } else if (e.type === 'pointerup' || e.type === 'pointercancel') {
+        if (!pointersDown.delete(e.pointerId)) return
+      }
       const r = canvas.getBoundingClientRect()
       k.x = e.clientX - r.left; k.y = e.clientY - r.top; k.button = e.button
+      k.id = e.pointerId; k.pt = e.pointerType
     }
     hooks.onEvent({ k: 'input', e: k })
   }
+  // The wheel, for a scene that names it; a trackpad's pinch (the browser sends
+  // it as ctrl + wheel, Safari as gesture events) for a scene that names that.
+  // Under any other scene the wheel scrolls the page.
+  function sendPinch(e, change) {
+    const r = canvas.getBoundingClientRect()
+    hooks.onEvent({ k: 'input', e: { type: 'pinch', change, x: e.clientX - r.left, y: e.clientY - r.top } })
+  }
+  function sendWheel(e) {
+    if (e.ctrlKey && takes.pinch) {
+      e.preventDefault()
+      sendPinch(e, Math.exp(-Math.max(-50, Math.min(50, e.deltaY)) * 0.01))
+    } else if (takes.wheel) {
+      e.preventDefault()
+      // In points: a wheel that counts in lines or pages is turned into them.
+      const amount = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? cssH : 1)
+      if (amount) hooks.onEvent({ k: 'input', e: { type: 'wheel', amount } })
+    }
+  }
+  let gesture = 1
+  function sendGesture(e) {
+    e.preventDefault()
+    if (e.type === 'gesturestart') { gesture = 1; return }
+    if (pointersDown.size >= 2 || !(e.scale > 0)) return
+    sendPinch(e, e.scale / gesture)
+    gesture = e.scale
+  }
+  const noMenu = (e) => e.preventDefault()
 
   H.set(1, window); H.set(2, canvas)
   if (three) { H.set(3, three); H.set(5, addons) }
+  // PLAIN DRAWING: Python's circle, rect, line, text, background and the rest. Each is ONE
+  // command, done here in one go, so 2,000 circles are 2,000 commands and not 6,000. The rules
+  // are those of pictures.js: what is given (a colour, a thickness, a size) is set on ctx and
+  // stays. `how` is the shape's last argument, { outline, thickness } (Python's keyword
+  // arguments): with a colour it is a border, without one it is the edge alone.
+  function ctxFor(name) {
+    const c = glRenderers.length ? null : getCtx()
+    if (!c) throw new Error(name + '() draws on the 2D canvas, and this scene is 3D. Draw with THREE here')
+    return c
+  }
+  function paint(c, colour, how) {
+    if (how == null) {
+      if (colour != null) c.fillStyle = colour
+      c.fill()
+      return
+    }
+    const edge = how.outline != null || how.thickness != null
+    if (colour != null) c.fillStyle = colour
+    if (colour != null || !edge) c.fill()
+    if (edge) {
+      if (how.outline != null && how.outline !== true) c.strokeStyle = how.outline
+      if (how.thickness != null) c.lineWidth = how.thickness
+      c.stroke()
+    }
+  }
+  function corners(c, x, y, radius, n, inner) {
+    c.beginPath()
+    const step = Math.PI * 2 / n
+    for (let i = 0; i < n; i++) {
+      const r = inner && i % 2 ? inner : radius, a = i * step - Math.PI / 2
+      c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r)
+    }
+    c.closePath()
+  }
+  let fontSize = 0, fontOf = ''
+  const stamps = new Map()
+  const plainDrawing = {
+    circle(x, y, radius, colour, how) {
+      const c = ctxFor('circle')
+      c.beginPath(); c.arc(x, y, radius, 0, Math.PI * 2)
+      paint(c, colour, how)
+    },
+    ellipse(x, y, w, h, colour, how) {
+      const c = ctxFor('ellipse')
+      c.beginPath(); c.ellipse(x, y, Math.abs(w) / 2, Math.abs(h) / 2, 0, 0, Math.PI * 2)
+      paint(c, colour, how)
+    },
+    rect(x, y, w, h, colour, how) {
+      const c = ctxFor('rect')
+      if (how == null) {
+        if (colour != null) c.fillStyle = colour
+        c.fillRect(x, y, w, h)
+        return
+      }
+      c.beginPath()
+      if (how.round) c.roundRect(x, y, w, h, how.round)
+      else c.rect(x, y, w, h)
+      paint(c, colour, how)
+    },
+    triangle(x1, y1, x2, y2, x3, y3, colour, how) {
+      const c = ctxFor('triangle')
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.lineTo(x3, y3); c.closePath()
+      paint(c, colour, how)
+    },
+    polygon(x, y, radius, sides, colour, how) {
+      const c = ctxFor('polygon')
+      corners(c, x, y, radius, Math.max(3, Math.round(sides)), 0)
+      paint(c, colour, how)
+    },
+    star(x, y, radius, points, colour, how) {
+      const c = ctxFor('star')
+      corners(c, x, y, radius, Math.max(2, Math.round(points)) * 2, radius * (how && how.inner != null ? how.inner : 0.4))
+      paint(c, colour, how)
+    },
+    line(x1, y1, x2, y2, colour, thickness) {
+      const c = ctxFor('line')
+      if (colour != null) c.strokeStyle = colour
+      if (thickness != null) c.lineWidth = thickness
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke()
+    },
+    text(words, x, y, colour, size, align) {
+      const c = ctxFor('text')
+      if (colour != null) c.fillStyle = colour
+      if (size != null) {
+        if (size !== fontSize) { fontSize = size; fontOf = size + 'px system-ui, sans-serif' }
+        c.font = fontOf
+      }
+      if (align != null) {
+        const middle = align === 'centre' || align === 'center'
+        c.textAlign = middle ? 'center' : align
+        c.textBaseline = middle ? 'middle' : 'alphabetic'
+      }
+      c.fillText(String(words), x, y)
+    },
+    background(colour) {
+      const c = ctxFor('background')
+      if (colour == null) { c.clearRect(0, 0, cssW, cssH); return }
+      const was = c.fillStyle
+      c.fillStyle = colour; c.fillRect(0, 0, cssW, cssH); c.fillStyle = was
+    },
+    // An emoji or a word is drawn once into a small canvas and stamped from then on; an image
+    // (Python sends a file's picture as the image it loaded) draws once it has arrived.
+    picture(what, x, y, size) {
+      const c = ctxFor('picture')
+      if (typeof what === 'string') {
+        const key = size + '|' + what
+        let pic = stamps.get(key)
+        if (!pic) {
+          const px = Math.max(1, Math.round(size * 1.3 * dpr))
+          pic = document.createElement('canvas')
+          pic.width = pic.height = px
+          const g = pic.getContext('2d')
+          g.font = Math.floor(size * dpr) + 'px system-ui, sans-serif'
+          g.textAlign = 'center'
+          g.textBaseline = 'middle'
+          g.fillText(what, px / 2, px / 2 + size * dpr * 0.06)
+          stamps.set(key, pic)
+        }
+        const box = size * 1.3
+        c.drawImage(pic, x - box / 2, y - box / 2, box, box)
+        return
+      }
+      if (!what || what.complete === false || !what.naturalWidth) return
+      const w = size * what.naturalWidth / what.naturalHeight
+      c.drawImage(what, x - w / 2, y - size / 2, w, size)
+    },
+  }
+  H.set(7, plainDrawing)
+  // SAVED VALUES: Python's save(). With no keeper given, what is saved lasts for the run.
+  H.set(8, { save: (name, kept) => { if (saved) saved.save(String(name), String(kept)) } })
   window.addEventListener('keydown', sendInput)
   window.addEventListener('keyup', sendInput)
+  window.addEventListener('blur', sendInput)
   canvas.addEventListener('pointerdown', sendInput)
   canvas.addEventListener('pointermove', sendInput)
+  canvas.addEventListener('pointerleave', sendInput)
   window.addEventListener('pointerup', sendInput)
+  window.addEventListener('pointercancel', sendInput)
+  if (takes.wheel || takes.pinch) canvas.addEventListener('wheel', sendWheel, { passive: false })
+  if (takes.pinch) {
+    canvas.addEventListener('gesturestart', sendGesture)
+    canvas.addEventListener('gesturechange', sendGesture)
+  }
+  if (takes.pointer) canvas.addEventListener('contextmenu', noMenu)
 
   // PRESENT ON THE VERTICAL BLANK. A frame's commands are held and drawn in
   // the page's own animation frame, so every frame lands on a screen refresh.
@@ -389,7 +637,9 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
       observer.disconnect()
       window.removeEventListener('keydown', sendInput)
       window.removeEventListener('keyup', sendInput)
+      window.removeEventListener('blur', sendInput)
       window.removeEventListener('pointerup', sendInput)
+      window.removeEventListener('pointercancel', sendInput)
       for (const g of glRenderers) { try { g.dispose() } catch (e) { /* already gone */ } }
       H.clear()
     },
@@ -787,6 +1037,12 @@ export class Scene {
       measuring: false, measureSince: 0, lastShown: 0,
       acc: { frames: 0, shown: 0, missed: 0, worst: 0, cmds: 0, ms: {} },
     }
+    // What this scene's saved values are kept under: its own address, so each scene on a site has its own.
+    // A scene that came with the page (one file holding everything) is told apart by the page's address.
+    const src = this.opt.src || this.name
+    const packed = inline()
+    this.saved = savedValues(!/^(?:https?|file):$/.test(location.protocol) ? this.name
+      : packed && packed.sources && packed.sources[src] != null ? `${location.pathname}#${src}` : new URL(src, document.baseURI).pathname)
     this.visible = false
     el.classList.add('pyctures-scene')
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative'
@@ -916,6 +1172,8 @@ export class Scene {
         three: three && three.three,
         addons: three && three.addons,
         images: imageResolver(this.opt.src, inl && inl.files),
+        saved: this.saved,
+        input: inputOf(source),
         hooks: {
           onEvent: (e) => { if (r.live) r.events.push(e) },
           onSize: (s) => { r.size = s },
@@ -931,7 +1189,7 @@ export class Scene {
       r.busy = true
       r.busySince = performance.now()
       this.setStatus('running')
-      const text = await this.transport.start(source, { ...r.size, measure: r.measuring })
+      const text = await this.transport.start(source, { ...r.size, measure: r.measuring, saved: this.saved.all() })
       r.busy = false
       if (r.warnedStuck) this.unstuck()
       if (token !== r.token) return

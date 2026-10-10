@@ -2,7 +2,7 @@
 
 Full reference: [www.circuitry.dev/docs/pyctures](https://www.circuitry.dev/docs/pyctures) (in Circuitry Studio's help)
 
-Pyctures ("Python pictures") gives Python the full set of JavaScript graphics functions: the web's 2D canvas for 2D, and three.js for 3D. Your program draws in a web browser: shapes, text, pictures, moving sprites, games, charts and 3D scenes. The names are the ones JavaScript uses, so any JavaScript graphics example can be brought across easily (see [Bringing a JavaScript example across](from-javascript.md)).
+Pyctures ("Python pictures") is for making 2D and 3D graphics and games in Python. It is for any age and any level, a first program or a thousandth, and it is designed to bring the joy back into programming: you type a few lines and see something move. Your program draws in a web browser: shapes, text, pictures, moving sprites, games, charts and 3D scenes. A few plain functions draw your first shapes; behind them is the full set of JavaScript graphics functions, the web's 2D canvas for 2D and three.js for 3D. The names are the ones JavaScript uses, so any JavaScript graphics example can be brought across easily (see [Bringing a JavaScript example across](from-javascript.md)).
 
 ## Install
 
@@ -18,18 +18,8 @@ Save this as `hello.py`:
 
 ```python
 def draw():
-    ctx.fill_style = "midnightblue"
-    ctx.fill_rect(0, 0, width, height)
-
-    ctx.fill_style = "gold"
-    ctx.begin_path()
-    ctx.arc(width / 2, height / 2, 80, 0, 6.283)
-    ctx.fill()
-
-    ctx.fill_style = "white"
-    ctx.font = "32px sans-serif"
-    ctx.text_align = "center"
-    ctx.fill_text("Hello!", width / 2, height / 2 + 140)
+    background("midnightblue")
+    circle(width / 2, height / 2, 80, "gold")
 ```
 
 Then run it:
@@ -38,7 +28,81 @@ Then run it:
 pyctures run hello.py
 ```
 
-Your browser opens and shows the scene. That is a whole program. There is nothing to import and nothing to set up: `draw()` is called every frame, `ctx` is the 2D drawing surface, and `width` and `height` are the size of the canvas.
+Your browser opens and shows the scene. That is a whole program. There is nothing to import and nothing to set up: `draw()` is called every frame. `background` paints the whole canvas and `circle(x, y, radius, colour)` draws a circle. `width` and `height` are the size of the canvas, so the circle sits in the middle. For everything else there is `ctx`, the web's own 2D drawing surface.
+
+## The next three steps
+
+Change `hello` a little at a time. Each of these is a whole program too.
+
+### Make it move
+
+```python
+x = 0
+
+def update(dt):
+    global x
+    x += 200 * dt            # 200 points every second
+    if x > width:            # off the right edge: start again on the left
+        x = 0
+
+def draw():
+    background("midnightblue")
+    circle(x, height / 2, 40, "gold")
+```
+
+`update(dt)` is called before every `draw()`. `dt` is the time since the last frame, so `200 * dt` moves the circle 200 points a second on any screen. `global x` lets the function change the `x` made outside it. Change the 200 and run it again.
+
+### Make it answer you
+
+```python
+x, y = 200, 150
+
+def update(dt):
+    global x, y
+    if "ArrowLeft" in keys: x -= 300 * dt
+    if "ArrowRight" in keys: x += 300 * dt
+    if mouse.down:           # a mouse button, or a finger
+        x, y = mouse.x, mouse.y
+
+def draw():
+    background("midnightblue")
+    circle(x, y, 40, "gold")
+```
+
+`"ArrowLeft" in keys` is true while that key is held, and `mouse` is the pointer, or a finger on a touch screen. Click the scene first, so it has the keyboard.
+
+### A bit more: a small game
+
+```python
+basket = Sprite("🧺", 200, 250, size=64)
+stars = [Sprite("⭐", random(400), random(300), size=36) for i in range(5)]
+score = 0
+
+def update(dt):
+    global score
+    if mouse.inside:                 # the pointer is over the picture
+        basket.x = mouse.x
+    basket.y = height - 50
+    for star in stars:
+        star.y += 200 * dt
+        caught = star.touches(basket)
+        if caught:
+            score += 1
+        if caught or star.y > height:    # caught or missed: back to the top
+            star.x = random(width)
+            star.y = 0
+
+def draw():
+    background("midnightblue")
+    for star in stars:
+        star.draw()
+    basket.draw()
+    text(f"Score {score}", 12, 30, "white", 20)
+```
+
+A `Sprite` is a picture that moves, here an emoji, and `touches` says when two of them meet. Move the mouse, or drag a finger, to catch the stars.
+
+These four are in the examples folder as `hello.py`, `moving.py`, `follow.py` and `first_game.py`. The tutorials carry on from here: [your first drawing](tutorials/first-drawing.md), [a bouncing ball](tutorials/bouncing-ball.md), [a simple game](tutorials/game.md) and [Space Rocks](tutorials/space-rocks.md). The plain functions (`background`, `circle`, `rect`, `line`, `text`) cover a first picture; for everything else there is `ctx`, the web's own 2D drawing surface ([Drawing in 2D](drawing-2d.md)).
 
 ## `pyctures run`: see it as you write it
 
@@ -134,6 +198,6 @@ Pyctures comes from [Circuitry Studio](https://www.circuitry.dev), where Python 
 - [2D functions](2d-functions.md) and [3D functions](3d-functions.md): everything, one line each.
 - [Bringing a JavaScript example across](from-javascript.md).
 - [Use it on your website](website.md).
-- Tutorials: [your first drawing](tutorials/first-drawing.md), [a bouncing ball](tutorials/bouncing-ball.md), [a simple game](tutorials/game.md), [a spinning cube](tutorials/spinning-cube.md), [lighting a scene](tutorials/lighting.md), [a solar system](tutorials/solar-system.md) and [a live chart](tutorials/live-chart.md).
+- Tutorials: [your first drawing](tutorials/first-drawing.md), [a bouncing ball](tutorials/bouncing-ball.md), [a simple game](tutorials/game.md), [Space Rocks](tutorials/space-rocks.md), [a spinning cube](tutorials/spinning-cube.md), [lighting a scene](tutorials/lighting.md), [a solar system](tutorials/solar-system.md) and [a live chart](tutorials/live-chart.md).
 - [Finding mistakes](finding-mistakes.md): errors, printing, and a scene that is stuck.
 - [Tips and limits](tips.md).

@@ -1,6 +1,6 @@
-# A lit 3D scene: shapes on a floor, with a spotlight and shadows.
-# Shows: materials, lights, shadows and orbit controls.
-# Drag to orbit, pinch or scroll to zoom.
+# Lit Scene: shapes on a floor in 3D, with a spotlight and shadows.
+# Use: drag to look around, pinch or scroll to zoom.
+# Try changing: shapes, the list of what stands on the floor; 60, how bright the spotlight is.
 #
 # Run it:   pyctures run lit_scene.py
 # Share it: pyctures build lit_scene.py -o site/

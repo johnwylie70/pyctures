@@ -42,15 +42,13 @@ Run it, then click the canvas so it has the keyboard, and press the left and rig
 Add a list of stars. Each frame they fall a little; when one reaches the bottom, or touches the basket, it goes back to the top at a random place.
 
 ```python
-import random
-
 player = Sprite("🧺", 200, 300, size=56)
 speed = 350
 score = 0
 
 def new_star():
-    star = Sprite("⭐", random.uniform(20, width - 20), random.uniform(-300, -20), size=36)
-    star.vy = random.uniform(100, 220)      # its falling speed
+    star = Sprite("⭐", random(20, width - 20), random(-300, -20), size=36)
+    star.vy = random(100, 220)      # its falling speed
     return star
 
 stars = [new_star() for _ in range(5)]
@@ -95,15 +93,13 @@ def draw():
 Now some things are dangerous: a bomb costs a life, and so does a star you miss. With no lives left, the game stops and waits for a tap, or the space bar, to start again.
 
 ```python
-import random
-
 player = Sprite("🧺", 200, 300, size=56)
 speed = 350
 
 def new_thing():
-    picture = "💣" if random.random() < 0.25 else "⭐"
-    thing = Sprite(picture, random.uniform(20, width - 20), random.uniform(-300, -20), size=36)
-    thing.vy = random.uniform(100, 220) + score * 4     # faster as you score
+    picture = pick(["💣", "⭐", "⭐", "⭐"])
+    thing = Sprite(picture, random(20, width - 20), random(-300, -20), size=36)
+    thing.vy = random(100, 220) + score * 4     # faster as you score
     return thing
 
 def start():
@@ -186,6 +182,7 @@ What changed:
 
 - Use your own pictures: `Sprite(load_image("https://…/basket.png"), ...)` works the same as an emoji.
 - Add a power-up, such as a 🍀 that gives back a life.
+- Ask one question in place of a loop: `thing = player.hit(things)` gives the first thing the basket touches, or `None`.
 - Add a high score: keep the best `score` in a variable that `start()` does not reset.
 - Add `?measure=1` to the page's address to see how smoothly it runs.
 
@@ -194,4 +191,4 @@ What changed:
 - [Drawing in 2D: sprites](../drawing-2d.md#sprites)
 - [How a program is shaped: keyboard, mouse and touch](../program-shape.md#keyboard-mouse-and-touch-input)
 - [Finding mistakes](../finding-mistakes.md): errors, printing and speed
-- Next: [a spinning 3D cube](../tutorials/spinning-cube.md)
+- Next: [Space Rocks](space-rocks.md), a game with sprites you draw yourself

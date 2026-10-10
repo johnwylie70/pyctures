@@ -1,6 +1,6 @@
 {
   "name": "pyctures",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Python 2D and 3D graphics on any web page: the browser half of Pyctures, with three.js. Python runs in the browser with Pyodide.",
   "type": "module",
   "main": "./pyctures.js",

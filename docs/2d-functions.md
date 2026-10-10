@@ -8,6 +8,34 @@ New to drawing? Start with [Drawing in 2D](drawing-2d.md), which explains the id
 
 **A note on `await`.** Almost every call here just draws, and returns straight away. A few give you an answer back (a width, a yes or no, some pixels). Those are marked **(await)**: put `await` in front to get the value, as in `w = await ctx.measure_text("hi").width`. Each one waits a frame, so use them now and then rather than every frame. See [reading a value back](program-shape.md#reading-a-value-back-with-await).
 
+## Plain drawing
+
+Functions for a first picture, one call each, with no `ctx.` in front ([the quick way](drawing-2d.md#the-quick-way-plain-functions)). A colour that is left out is the one already in use; one that is given stays for what is drawn next.
+
+| Call | What it draws |
+|---|---|
+| `background(colour)` | Paints the whole canvas. It leaves the colour in use as it was. With no colour it wipes the canvas clear |
+| `circle(x, y, radius, colour)` | A filled circle centred on `x, y` |
+| `ellipse(x, y, width, height, colour)` | An oval centred on `x, y` |
+| `rect(x, y, width, height, colour)` | A filled rectangle, top-left corner at `x, y`. `round=12` rounds its corners |
+| `triangle(x1, y1, x2, y2, x3, y3, colour)` | A triangle, by its three corners |
+| `polygon(x, y, radius, sides, colour)` | A shape with that many equal sides, centred on `x, y`, one corner straight up |
+| `star(x, y, radius, points, colour)` | A star with that many points, one straight up. Its inner corners are 0.4 of the radius out; `inner=0.6` changes that |
+| `line(x1, y1, x2, y2, colour, thickness)` | A straight line |
+| `text(words, x, y, colour, size, align)` | Words, `size` points high. `align` is `"left"` (as it starts), `"right"` or `"centre"`; with `"centre"`, `x, y` is the middle of the words |
+| `picture(what, x, y, size)` | An emoji or a word, an image file beside the program, or a loaded image, centred on `x, y` and `size` high (48 unless you say). A file draws once it has loaded |
+
+Every shape (`circle`, `ellipse`, `rect`, `triangle`, `polygon`, `star`) takes `outline="white", thickness=3` last. With a colour it is a filled shape with a border; without a colour it is the edge alone. The outline's colour and thickness stay for the next outline.
+
+| Call | What it gives |
+|---|---|
+| `random(min, max)` | A whole number from `min` to `max`, either end included. If an end has a fraction, any number between them |
+| `random(max)`, `random()` | From 0 to `max`; with nothing, a fraction from 0 up to 1 |
+| `pick(list)` | One thing from a list, by chance |
+| `degrees(n)` | An angle said in degrees, wherever an angle is wanted: `ctx.rotate(degrees(45))`, `ship.angle = degrees(90)`. Everything else here counts angles in radians |
+
+Everything below is `ctx`, which does all of this and much more.
+
 ## Size and helpers
 
 These come ready to use, as well as `ctx`:
@@ -20,10 +48,22 @@ These come ready to use, as well as `ctx`:
 | `await frame()` | Shows this frame and waits for the next |
 | `await flush()` | Shows what is drawn so far, now, and carries on |
 | `await sleep(seconds)` | Waits that long |
-| `keys` | The set of keys held down: `"ArrowLeft" in keys` |
+| `keys` | The set of keys held down: `"ArrowLeft" in keys`. Also `keys.shift`, `keys.ctrl`, `keys.alt`, `keys.meta`, and `keys.codes` (keys by their place: `"KeyW"`) |
+| `pressed`, `released` | The keys that went down, and came up, since the last frame: `" " in pressed` |
 | `mouse.x`, `mouse.y`, `mouse.down` | Where the pointer or finger is, and whether it is pressed |
+| `mouse.button`, `mouse.inside` | Which button is down (`"left"`, `"middle"`, `"right"` or `None`), and whether the pointer is over the scene |
+| `mouse.dx`, `mouse.dy`, `mouse.wheel` | How far the pointer moved, and the wheel turned, since the last frame |
+| `touches` | Every finger (or pressed mouse button) that is down: each has `id`, `x`, `y`, `start_x`, `start_y`, `dx`, `dy`, `type` |
+| `pinch.scale`, `pinch.change`, `pinch.x`, `pinch.y` | Two fingers as a zoom: the scale since the pinch began, its change since the last frame, and its middle |
 | `load_image(address)` | Loads a picture to draw ([Images](#images)) |
-| `Sprite(picture, x, y, size=48)` | A moving picture with `x`, `y`, `vx`, `vy`, `angle`, `size`, `visible`, `update(dt)`, `draw()` and `touches(other)` ([Sprites](drawing-2d.md#sprites)) |
+| `save(name, value)`, `load(name, otherwise)` | Keep a value for the next time the program runs, and get it back: a number, text, `True` or `False`, a list or a dictionary ([Saved values](saved-values.md)) |
+| `Sprite(picture, x, y, size=48)` | A moving picture with `x`, `y`, `vx`, `vy`, `angle`, `spin`, `size`, `visible`, `update(dt)` and `draw()`. The picture is an emoji, an image, or a function that draws it, given the sprite's size ([Sprites](drawing-2d.md#sprites)) |
+| `Sprite.box(x, y, width, height, colour)`, `Sprite.circle(x, y, size, colour)` | A plain coloured box or circle, hit-tested as the shape you see |
+| `sprite.touches(other)`, `sprite.hit(sprites)`, `sprite.contains(x, y)` | Do two sprites overlap; the first sprite in a list that it touches, or `None`; is a point on it. A sprite's `shape` is `"circle"` or `"box"` ([Sprites that touch](drawing-2d.md#sprites-that-touch)) |
+| `sprite.wrap()`, `sprite.bounce()`, `sprite.offscreen()` | Come back on the opposite edge; bounce off the edges, or the ones named; is all of it outside the picture |
+| `sprite.push(amount)`, `sprite.forward(distance)`, `sprite.limit(speed)` | Speed up the way it faces; step the way it faces; never faster than this |
+| `sprite.angle_to(other)`, `sprite.distance_to(other)` | The angle and the distance to another sprite, to `mouse`, or to a point `(x, y)` |
+| `remove(things, thing)` | Take a thing out of a list. Loop over a copy while removing: `for rock in rocks[:]:` |
 | `js` | Everything else the page has, such as `js.Path2D` and `js.document` |
 
 ## Rectangles

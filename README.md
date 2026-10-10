@@ -6,7 +6,9 @@
 
 **[See them running in your browser, with their code →](https://johnwylie70.github.io/pyctures/)** Nothing to install. Or **[change the code and run it on the Pyctures page →](https://www.circuitry.dev/pyctures)**
 
-Pyctures ("Python pictures") gives Python the full set of JavaScript graphics functions: the web's 2D canvas for 2D, and three.js for 3D. Write a short Python program and it draws in your web browser: shapes, text, moving sprites, games, animations, live charts and lit 3D scenes. The names are the ones JavaScript uses, so any JavaScript graphics example can be brought across easily. Run a scene with your own Python while you write it, then build it into a folder that runs in any browser, on any website.
+Pyctures ("Python pictures") is for making 2D and 3D graphics and games in Python, and for enjoying it. It is for any age and any level, a first program or a thousandth: you type a few lines and see something move. It is designed to bring the joy back into programming. Write a short Python program and it draws in your web browser: shapes, text, moving sprites, games, animations, live charts and lit 3D scenes. Underneath are the web's 2D canvas and three.js, with the names JavaScript uses, so any JavaScript graphics example can be brought across easily. Run a scene with your own Python while you write it, then build it into a folder that runs in any browser, on any website.
+
+Prefer JavaScript? [pictures.js](https://www.circuitry.dev/pictures) is the sibling library: the same shape of program (`setup()`, `update(dt)`, `draw()`, `keys`, `mouse`, `Sprite`, three.js) in a plain `.js` file, with no HTML to write. A scene comes across from one to the other with little more than its syntax changed.
 
 ## Install
 
@@ -16,26 +18,93 @@ pip install pyctures
 
 Python 3.9 or newer. Nothing else is installed.
 
-## A first scene
+## Start with four small scenes
 
-Save this as `hello.py`:
+Each one is a whole program, a few lines longer than the last. Nothing of Pyctures needs importing. [How to run one](#run-it) is just below.
+
+**1. Draw something.** Save this as `hello.py`:
 
 ```python
-import math
-
 def draw():
-    ctx.fill_style = "midnightblue"
-    ctx.fill_rect(0, 0, width, height)
-    for i in range(12):
-        ctx.fill_style = f"hsl({i * 30}, 80%, 60%)"
-        ctx.begin_path()
-        ctx.arc(width / 2 + 120 * math.cos(i / 1.91), height / 2 + 120 * math.sin(i / 1.91), 20, 0, math.tau)
-        ctx.fill()
+    background("midnightblue")
+    circle(width / 2, height / 2, 80, "gold")
 ```
 
-![What hello.py draws: twelve circles in a ring of rainbow colours on dark blue](docs/images/readme-hello.jpg)
+![What hello.py draws: a gold circle in the middle of a dark blue picture](docs/images/readme-hello.jpg)
 
-`draw()` is called every frame, `ctx` is the 2D drawing surface, and `width` and `height` are the size of the canvas. There is nothing to import.
+`draw()` is called every frame. `background` paints the whole picture, and `circle(x, y, radius, colour)` draws a circle. `width` and `height` are the size of the picture, so this circle sits in the middle.
+
+**2. Make it move.**
+
+```python
+x = 0
+
+def update(dt):
+    global x
+    x += 200 * dt            # 200 points every second
+    if x > width:            # off the right edge: start again on the left
+        x = 0
+
+def draw():
+    background("midnightblue")
+    circle(x, height / 2, 40, "gold")
+```
+
+`update(dt)` is called before every `draw()`. `dt` is the time since the last frame, so `200 * dt` moves the circle 200 points a second on any screen. `global x` lets the function change the `x` made outside it. Change the 200 and run it again.
+
+**3. Make it answer you.**
+
+```python
+x, y = 200, 150
+
+def update(dt):
+    global x, y
+    if "ArrowLeft" in keys: x -= 300 * dt
+    if "ArrowRight" in keys: x += 300 * dt
+    if mouse.down:           # a mouse button, or a finger
+        x, y = mouse.x, mouse.y
+
+def draw():
+    background("midnightblue")
+    circle(x, y, 40, "gold")
+```
+
+`"ArrowLeft" in keys` is true while that key is held, and `mouse` is the pointer, or a finger on a touch screen. Click the scene first, so it has the keyboard.
+
+**4. A bit more: a small game.**
+
+```python
+basket = Sprite("🧺", 200, 250, size=64)
+stars = [Sprite("⭐", random(400), random(300), size=36) for i in range(5)]
+score = 0
+
+def update(dt):
+    global score
+    if mouse.inside:                 # the pointer is over the picture
+        basket.x = mouse.x
+    basket.y = height - 50
+    for star in stars:
+        star.y += 200 * dt
+        caught = star.touches(basket)
+        if caught:
+            score += 1
+        if caught or star.y > height:    # caught or missed: back to the top
+            star.x = random(width)
+            star.y = 0
+
+def draw():
+    background("midnightblue")
+    for star in stars:
+        star.draw()
+    basket.draw()
+    text(f"Score {score}", 12, 30, "white", 20)
+```
+
+![What first_game.py draws: stars falling towards a basket, with the score in the corner](docs/images/readme-first-game.jpg)
+
+A `Sprite` is a picture that moves, here an emoji, and `touches` says when two of them meet. Move the mouse, or drag a finger, to catch the stars.
+
+These four are in the examples folder as `hello.py`, `moving.py`, `follow.py` and `first_game.py`. The tutorials carry on from here: [your first drawing](docs/tutorials/first-drawing.md), [a bouncing ball](docs/tutorials/bouncing-ball.md), [a simple game](docs/tutorials/game.md) and [Space Rocks](docs/tutorials/space-rocks.md). The plain functions (`background`, `circle`, `rect`, `line`, `text`) cover a first picture; for everything else there is `ctx`, the web's own 2D drawing surface ([Drawing in 2D](docs/drawing-2d.md)). `save("best", score)` keeps a value and `load("best", 0)` gives it back the next time the scene runs ([Saved values](docs/saved-values.md)).
 
 ## Run it
 
@@ -170,6 +239,11 @@ In [`examples/`](examples), each with a comment at the top saying what it shows.
 | File | What it is |
 |---|---|
 | `star_catcher.py` | A 2D game with sprites, a score and lives |
+| `space_rocks.py` | Space Rocks: steer a ship and shoot the rocks, which break in two and wrap round the edges |
+| `bat_and_ball.py` | Bat and Ball: one player against the computer |
+| `brick_breaker.py` | Brick Breaker: a bat, a ball and a wall of bricks |
+| `snake.py` | Snake: a game on a grid, with a best score that is kept |
+| `high_score.py` | A best score that is still there next time: `save` and `load` |
 | `cube_dodge.py` | A 3D game: dodge the oncoming blocks |
 | `lit_scene.py` | Shapes on a floor with a spotlight and shadows |
 | `bouncing_balls.py` | A 2D animation with trails; click to add balls |
@@ -180,6 +254,9 @@ In [`examples/`](examples), each with a comment at the top saying what it shows.
 | `starfield.py`, `spiral_garden.py` | 2D: fly through stars, dots on the golden angle |
 | `type_and_measure.py` | Keyboard input, and reading a value back with `await` |
 | `from_javascript_2d.py`, `from_javascript_3d.py` | JavaScript examples brought across |
+| `hello.py`, `moving.py`, `follow.py`, `first_game.py` | The four small scenes at the top of this page |
+| `night_sky.py` | A whole picture from the plain drawing functions, with no `ctx` |
+| `ring.py` | Twelve circles in a ring |
 | `website/` | A web page with two scenes on it |
 
 ```bash
@@ -189,7 +266,7 @@ pyctures run examples            # a list of them all
 
 ## Docs
 
-Start with [Getting started](docs/getting-started.md), then [how a program is shaped](docs/program-shape.md), [drawing in 2D](docs/drawing-2d.md), [3D scenes](docs/3d.md), [colours](docs/colours.md), and [tips](docs/tips.md). The [2D functions](docs/2d-functions.md) and [3D functions](docs/3d-functions.md) pages list everything, one line each. Seven tutorials are in [docs/tutorials](docs/tutorials).
+Start with [Getting started](docs/getting-started.md), then [how a program is shaped](docs/program-shape.md), [drawing in 2D](docs/drawing-2d.md), [3D scenes](docs/3d.md), [colours](docs/colours.md), [saved values](docs/saved-values.md), and [tips](docs/tips.md). The [2D functions](docs/2d-functions.md) and [3D functions](docs/3d-functions.md) pages list everything, one line each. Seven tutorials are in [docs/tutorials](docs/tutorials).
 
 
 ## Pyctures in Circuitry Studio

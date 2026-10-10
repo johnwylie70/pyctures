@@ -1,4 +1,9 @@
-# Torus Knot: one shape, lit, turning. Drag to look around it.
+# Torus Knot: one knotted shape, lit and turning.
+# Use: drag to look around it.
+# Try changing: 3, 5, how the knot winds (try 2, 3); 0.004, how fast it turns.
+#
+# Run it:   pyctures run torus_knot.py
+
 renderer = THREE.WebGLRenderer(canvas=canvas, antialias=True)
 renderer.setPixelRatio(pixel_ratio)
 renderer.setSize(width, height, False)

@@ -45,7 +45,7 @@ pyctures build my-page/ -o site/
 That copies everything in `my-page/` (your HTML, your `.py` files, pictures) into `site/` and adds the `pyctures/` folder. Or load the browser half from a CDN instead, once the npm package is published (replace the version with the one you want):
 
 ```html
-<script type="module" src="https://cdn.jsdelivr.net/npm/pyctures@0.1.0/pyctures.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/pyctures@0.2.0/pyctures.js"></script>
 ```
 
 ### What a scene's box does
@@ -53,7 +53,9 @@ That copies everything in `my-page/` (your HTML, your `.py` files, pictures) int
 - **The canvas fills its box** and follows it when the box changes size, so size the `<div>` with CSS like any other element. A box with no height of its own is given a 16:9 shape.
 - **A scene starts when it is scrolled into view**, and pauses while it is out of view or the tab is hidden. A long page with many scenes only runs the ones being looked at.
 - **The keyboard** reaches a scene after a visitor clicks or taps it, so the arrow keys still scroll the page until then.
-- **Touch** on a scene is the mouse (`mouse.down`, `mouse.x`). Scrolling a phone with a finger on a scene moves the scene, not the page, so leave some page around it to scroll by. In 3D, turn off zooming with `controls.enableZoom = False` so the mouse wheel scrolls the page.
+- **Touch** on a scene is the mouse (`mouse.down`, `mouse.x`), and every finger is in `touches`. Scrolling a phone with a finger on a scene moves the scene, not the page, so leave some page around it to scroll by. In 3D, turn off zooming with `controls.enableZoom = False` so the mouse wheel scrolls the page.
+- **The mouse wheel** scrolls the page when the pointer is over a scene, unless the scene names the wheel (`mouse.wheel` or `on_wheel`). Such a scene keeps the wheel, so give visitors some page beside it to scroll by. A scene that names `pinch` keeps a trackpad's pinch in the same way.
+- **The right mouse button** opens no menu over a scene that uses the pointer: the scene reads it as `mouse.button == "right"`.
 - **Printing** goes to the browser's console.
 - **Errors** are shown over the scene, with the line in the Python file, and a **Run again** button.
 

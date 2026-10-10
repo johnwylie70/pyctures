@@ -34,6 +34,11 @@ SITE = "https://johnwylie70.github.io/pyctures/"
 SCENES = [
     ("solar_system.py", "Solar System", "Planets in turning groups, a moon, a light at the sun and 2,000 stars.", "Drag to look around."),
     ("star_catcher.py", "Star Catcher", "A 2D game with emoji sprites, a score and lives.", "Arrow keys or drag. Catch the stars, dodge the rocks."),
+    ("space_rocks.py", "Space Rocks", "Steer a ship and shoot the rocks, which break in two.", "Left and right turn, up flies, space shoots. Or hold to fly to your finger, and tap to shoot."),
+    ("brick_breaker.py", "Brick Breaker", "A bat, a ball and a wall of bricks.", "Arrow keys or drag. Clear the wall to win."),
+    ("bat_and_ball.py", "Bat and Ball", "One player against the computer. First to 5 wins.", "Up and down, or drag."),
+    ("snake.py", "Snake", "A game on a grid: eat the apples and grow. Your best score is kept.", "Arrow keys, or tap the side to turn to."),
+    ("high_score.py", "High Score", "Catch the star as often as you can in 10 seconds. The best score is still there next time: save() and load().", "Click or tap the star."),
     ("cube_spiral.py", "Cube Spiral", "400 cubes in a rainbow spiral, turning.", "Drag to look around."),
     ("cube_dodge.py", "Cube Dodge", "A 3D game with shadows, fog and the keyboard.", "Arrow keys or drag. Dodge the red blocks."),
     ("bouncing_balls.py", "Bouncing Balls", "A 2D animation with trails and hsl() colours.", "Click or tap to add a ball."),
@@ -47,6 +52,12 @@ SCENES = [
     ("from_javascript_3d.py", "From JavaScript: 3D", "The classic three.js spinning cube, line for line in Python.", ""),
     ("from_javascript_2d.py", "From JavaScript: 2D", "A canvas example written the way JavaScript writes it.", "Click it."),
     ("type_and_measure.py", "Typing", "Type and your words appear, with a box drawn to fit them.", "Click it, then type."),
+    ("night_sky.py", "Night Sky", "A whole picture from the plain drawing functions: stars, a moon, a hill and a house.", ""),
+    ("hello.py", "Hello", "The smallest scene: a background and one circle.", ""),
+    ("moving.py", "Moving", "A circle crossing the picture: update(dt) and one number.", "Change the 200 in the code to change its speed."),
+    ("follow.py", "Follow", "A circle you move.", "Arrow keys, or hold the mouse or a finger on it."),
+    ("first_game.py", "First Game", "Catch the falling stars in the basket: sprites, touches() and a score.", "Move the mouse, or drag a finger."),
+    ("ring.py", "Ring", "Twelve circles in a ring.", ""),
 ]
 
 # The scenes the README's animated picture shows, a few seconds each.
@@ -254,12 +265,10 @@ def gif(out, target, seconds=3.0, fps=15):
 def readme_stills():
     """A still of what each of the README's examples draws, beside its code."""
     from playwright.sync_api import sync_playwright
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    hello = re.search(r"## A first scene.*?```python\n(.*?)```", readme, re.S).group(1)
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        (tmp / "hello.py").write_text(hello, encoding="utf-8")
-        stills = [("readme-hello", tmp / "hello.py"),
+        stills = [("readme-hello", EXAMPLES / "hello.py"),
+                  ("readme-first-game", EXAMPLES / "first_game.py"),
                   ("readme-textured-cube", EXAMPLES / "textured_cube.py"),
                   ("readme-from-javascript", EXAMPLES / "from_javascript_3d.py")]
         for name, scene in stills:

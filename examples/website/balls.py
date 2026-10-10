@@ -1,4 +1,7 @@
-# Bouncing balls, for the example web page. Click to add a ball.
+# Bouncing balls, for the example web page (index.html beside this file).
+# Use: click to add a ball.
+# Try changing: 600, the pull of gravity.
+
 import math, random
 
 balls = []

@@ -3,6 +3,7 @@
 Needs Playwright:  pip install playwright && playwright install chromium
 Screenshots land in tests/screenshots/.
 """
+import json
 import shutil
 import time
 import urllib.request
@@ -94,7 +95,9 @@ class Watched:
 def test_run_each_example(browser, pyctures_run, scene):
     p = pyctures_run(EXAMPLES / scene)
     w = Watched(browser, p.url)
-    w.check("run-" + scene.replace(".py", ".png"))
+    # The three smallest scenes are one circle on one colour: two colours is a whole picture there.
+    plain = scene in ("hello.py", "moving.py", "follow.py")
+    w.check("run-" + scene.replace(".py", ".png"), min_colours=2 if plain else 4)
     w.page.close()
 
 
@@ -133,6 +136,26 @@ def test_run_error_page_shows_the_line(browser, pyctures_run, tmp_path):
     assert "NameError" in text and "undefined_name" in text
     assert w.scenes()[0].get_attribute("data-pyctures-error").startswith("line 4")
     w.page.screenshot(path=str(SHOTS / "run-error.png"))
+
+
+@pytest.mark.parametrize("what, source, line, says", [
+    ("a stray sign", "x = 1\ny = 2\nz = = 3\n", 3, "SyntaxError"),
+    ("a bracket never closed", "x = 1\ndef draw():\n    circle(1, 2, 3, 'gold'\n\ny = 2\n", 3, "'(' was never closed"),
+    ("a line not indented", "x = 1\ndef draw():\ncircle(1, 2, 3)\n", 3, "IndentationError"),
+    ("running, at the top", "x = 1\ny = 2\nnot_there(3)\n", 3, "not_there"),
+    ("running, inside update", "x = 1\n\ndef update(dt):\n    x.move()\n", 4, "move"),
+    ("running, after await frame()", "x = 1\nasync def go():\n    await frame()\n    await frame()\n    not_there(3)\nawait go()\n", 5, "not_there"),
+])
+def test_run_error_names_the_line(browser, pyctures_run, tmp_path, what, source, line, says):
+    """A mistake in how the file is written, or one made while it runs, names its line."""
+    scene = tmp_path / "broken.py"
+    scene.write_text(source)
+    p = pyctures_run(scene)
+    w = Watched(browser, p.url)
+    w.page.wait_for_selector(".pyctures-error", timeout=20000)
+    text = w.page.inner_text(".pyctures-error")
+    assert f"Error on line {line} of broken.py" in text, what
+    assert says in text, what
 
 
 def test_run_saving_reruns_the_page(browser, pyctures_run, tmp_path):
@@ -248,6 +271,160 @@ def test_build_in_an_iframe(browser, static_server, tmp_path):
     assert colours >= 4
     assert not w.errors, w.errors
     w.page.screenshot(path=str(SHOTS / "build-iframe.png"))
+
+
+# ---------------------------------------------------------------- input: touches, mouse, wheel, pinch, keys
+
+INPUT_PROBE = '''
+import json
+log = []
+frames = []
+def r(v): return round(v, 2)
+def on_key_down(key, code): log.append(["kd", key, code])
+def on_key_up(key): log.append(["ku", key])
+def on_mouse_down(x, y, button): log.append(["md", r(x), r(y), button])
+def on_mouse_up(x, y, button): log.append(["mu", r(x), r(y), button])
+def on_touch_start(t): log.append(["ts", r(t.x), r(t.y), t.type])
+def on_touch_end(t, cancelled): log.append(["te", r(t.x), r(t.y), cancelled])
+def on_wheel(amount): log.append(["wheel", amount])
+def on_pinch(scale, change): log.append(["pinch", r(scale)])
+def update(dt):
+    if mouse.dx or mouse.wheel or pressed or released or pinch.change != 1 or any(t.dx or t.dy for t in touches):
+        frames.append({"dx": r(mouse.dx), "wheel": mouse.wheel, "pressed": sorted(pressed), "released": sorted(released),
+                       "change": r(pinch.change), "t": [[r(t.dx), r(t.dy)] for t in touches]})
+def draw():
+    ctx.fill_style = "#234"
+    ctx.fill_rect(0, 0, width, height)
+    js.window.probe = json.dumps({
+        "keys": sorted(keys), "codes": sorted(keys.codes), "mods": [keys.shift, keys.ctrl, keys.alt, keys.meta],
+        "mouse": [r(mouse.x), r(mouse.y), mouse.down, mouse.button, mouse.inside],
+        "touches": [[r(t.x), r(t.y), r(t.start_x), r(t.start_y), t.type] for t in touches],
+        "scale": r(pinch.scale), "log": log, "frames": frames})
+'''
+
+
+class Driven:
+    """A scene in a touch screen's page, with real input sent to it."""
+
+    def __init__(self, browser, url):
+        self.context = browser.new_context(viewport={"width": 800, "height": 600}, has_touch=True)
+        self.page = self.context.new_page()
+        self.errors = []
+        self.page.on("pageerror", lambda e: self.errors.append(str(e)))
+        self.page.goto(url)
+        self.cdp = self.context.new_cdp_session(self.page)
+        end = time.time() + 90
+        while time.time() < end and not self.page.evaluate("typeof window.probe === 'string'"):
+            self.page.wait_for_timeout(200)
+        self.page.wait_for_timeout(300)
+
+    def probe(self):
+        # A few frames on, so what was just sent has been through Python and back.
+        self.page.wait_for_timeout(350)
+        return json.loads(self.page.evaluate("window.probe"))
+
+    def touch(self, kind, *points):
+        self.cdp.send("Input.dispatchTouchEvent", {
+            "type": kind, "touchPoints": [{"id": i, "x": x, "y": y} for i, x, y in points]})
+
+
+def _drive_input(d):
+    page = d.page
+    # mouse: movement, each button
+    page.mouse.move(100, 50)
+    page.mouse.move(130, 50)
+    p = d.probe()
+    assert p["mouse"] == [130, 50, False, None, True]
+    assert sum(f["dx"] for f in p["frames"]) == 30   # the first place is not a movement
+    for button in ("left", "middle", "right"):
+        page.mouse.down(button=button)
+        p = d.probe()
+        assert p["mouse"][2:4] == [True, button] and p["touches"] == [[130, 50, 130, 50, "mouse"]]
+        page.mouse.up(button=button)
+        p = d.probe()
+        assert p["mouse"][2:4] == [False, None] and p["touches"] == []
+    assert [e[0] for e in p["log"]] == ["md", "ts", "mu", "te"] * 3
+    assert [e[3] for e in p["log"] if e[0] == "md"] == ["left", "middle", "right"]
+    # the wheel is the scene's
+    page.mouse.wheel(0, 120)
+    p = d.probe()
+    assert p["log"][-1] == ["wheel", 120] and sum(f["wheel"] for f in p["frames"]) == 120
+    # a trackpad's pinch arrives as ctrl + wheel
+    d.cdp.send("Input.dispatchMouseEvent", {"type": "mouseWheel", "x": 130, "y": 50, "deltaX": 0, "deltaY": -10, "modifiers": 2})
+    p = d.probe()
+    assert p["log"][-1] == ["pinch", 1.11]
+    page.wait_for_timeout(400)
+    assert d.probe()["scale"] == 1
+    # fingers: two, a pinch, a third, and letting go
+    d.touch("touchStart", (1, 100, 100))
+    d.touch("touchStart", (1, 100, 100), (2, 300, 100))
+    p = d.probe()
+    assert [t[:2] for t in p["touches"]] == [[100, 100], [300, 100]] and p["touches"][0][4] == "touch"
+    assert p["mouse"][:4] == [100, 100, True, "left"]
+    d.touch("touchMove", (1, 100, 100), (2, 400, 100))
+    p = d.probe()
+    assert p["scale"] == 1.5 and p["touches"][1][:4] == [400, 100, 300, 100]
+    assert p["mouse"][:2] == [100, 100]   # the mouse follows the first finger only
+    assert [100, 0] in [f["t"][1] for f in p["frames"] if len(f["t"]) == 2]
+    d.touch("touchStart", (1, 100, 100), (2, 400, 100), (3, 200, 250))
+    assert len(d.probe()["touches"]) == 3
+    d.touch("touchEnd", (1, 100, 100))
+    p = d.probe()
+    assert len(p["touches"]) == 2 and p["mouse"][2] is False
+    d.touch("touchCancel")
+    p = d.probe()
+    assert p["touches"] == [] and p["scale"] == 1 and p["mouse"][4] is False
+    assert [e[3] for e in p["log"] if e[0] == "te"][-3:] == [False, True, True]
+    # keys: pressed and released once, the modifiers, and Shift let go first
+    start = len(p["frames"])
+    page.keyboard.down("ShiftLeft")
+    page.keyboard.down("KeyA")
+    p = d.probe()
+    assert p["keys"] == ["A", "Shift"] and p["codes"] == ["KeyA", "ShiftLeft"] and p["mods"] == [True, False, False, False]
+    page.keyboard.up("ShiftLeft")
+    p = d.probe()
+    assert p["keys"] == ["A"] and p["mods"][0] is False
+    page.keyboard.up("KeyA")
+    p = d.probe()
+    assert p["keys"] == [] and p["codes"] == []
+    assert [e for e in p["log"] if e[0] in ("kd", "ku")] == [["kd", "Shift", "ShiftLeft"], ["kd", "A", "KeyA"], ["ku", "Shift"], ["ku", "A"]]
+    new = p["frames"][start:]
+    assert sorted(k for f in new for k in f["pressed"]) == ["A", "Shift"]
+    assert sorted(k for f in new for k in f["released"]) == ["A", "Shift"]
+    assert not d.errors, d.errors
+
+
+def test_run_input_reaches_python(browser, pyctures_run, tmp_path):
+    scene = tmp_path / "probe.py"
+    scene.write_text(INPUT_PROBE)
+    d = Driven(browser, pyctures_run(scene).url)
+    _drive_input(d)
+    d.context.close()
+
+
+@needs_cdn
+def test_build_input_reaches_python(browser, static_server, tmp_path):
+    from pyctures.build import build
+    scene = tmp_path / "probe.py"
+    scene.write_text(INPUT_PROBE)
+    out = tmp_path / "site"
+    build(scene, out, say=lambda *a: None)
+    d = Driven(browser, static_server(out))
+    _drive_input(d)
+    d.context.close()
+
+
+def test_a_scene_that_names_no_wheel_leaves_it_to_the_page(browser, pyctures_run):
+    """examples/website: two scenes in a long page, neither naming the wheel."""
+    p = pyctures_run(EXAMPLES / "website")
+    w = Watched(browser, p.url, size=(900, 500))
+    w.page.wait_for_timeout(1000)
+    box = w.scenes()[0].bounding_box()
+    w.page.mouse.move(box["x"] + 50, box["y"] + 50)
+    w.page.mouse.wheel(0, 300)
+    w.page.wait_for_timeout(500)
+    assert w.page.evaluate("scrollY") > 100
+    w.page.close()
 
 
 # ---------------------------------------------------------------- the docs' own code

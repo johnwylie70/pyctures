@@ -229,6 +229,167 @@ def test_keys_mouse_and_on_functions():
     assert pyctures.S.ns["log"] == [("down", "ArrowLeft"), ("press", 5, 6), ("up", "ArrowLeft")]
 
 
+def inp(type, **e):
+    return {"k": "input", "e": dict(e, type=type)}
+
+
+def test_touches_are_every_pointer_down_and_mouse_follows_the_first():
+    start("""
+        log = []
+        def on_mouse_down(x, y, button): log.append(("md", x, y, button))
+        def on_mouse_move(x, y): log.append(("mm", x, y))
+        def on_mouse_up(x, y, button): log.append(("mu", x, y, button))
+        def on_touch_start(t): log.append(("ts", t.id, t.x, t.y, t.type))
+        def on_touch_move(t): log.append(("tm", t.id, t.x, t.y))
+        def on_touch_end(t, cancelled): log.append(("te", t.id, t.x, t.y, cancelled))
+        def draw(): pass
+    """)
+    log = pyctures.S.ns["log"]
+    t, m = pyctures.touches, pyctures.mouse
+    tick(events=[inp("pointerdown", id=7, pt="touch", x=100, y=50, button=0),
+                 inp("pointerdown", id=8, pt="touch", x=300, y=50, button=0)])
+    assert [(a.id, a.x, a.y, a.start_x, a.type) for a in t] == [(7, 100, 50, 100, "touch"), (8, 300, 50, 300, "touch")]
+    assert (m.x, m.y, m.down, m.button, m.inside) == (100, 50, True, "left", True)
+    assert (m.dx, m.dy) == (0, 0)   # a finger going down is not a movement
+    assert log == [("md", 100, 50, "left"), ("ts", 7, 100, 50, "touch"), ("ts", 8, 300, 50, "touch")]
+    del log[:]
+    tick(events=[inp("pointermove", id=8, pt="touch", x=310, y=70),
+                 inp("pointermove", id=8, pt="touch", x=320, y=80),
+                 inp("pointermove", id=7, pt="touch", x=90, y=50)])
+    assert (t[1].dx, t[1].dy, t[1].x, t[1].start_x) == (20, 30, 320, 300)
+    assert (t[0].dx, m.dx, m.x) == (-10, -10, 90)   # the mouse follows the first finger only
+    assert [e[0] for e in log] == ["tm", "tm", "mm", "tm"]
+    tick()
+    assert (t[1].dx, t[1].dy, m.dx) == (0, 0, 0)   # what happened last frame is cleared
+    del log[:]
+    first = t[0]
+    tick(events=[inp("pointerup", id=7, pt="touch", x=90, y=55),
+                 inp("pointercancel", id=8, pt="touch", x=320, y=80),
+                 inp("pointerleave")])
+    assert t == [] and not m.down and m.button is None and not m.inside
+    assert log == [("mu", 90, 55, "left"), ("te", 7, 90, 55, False), ("te", 8, 320, 80, True)]
+    assert "touch(id=7" in repr(first)
+
+
+def test_mouse_buttons_movement_wheel_and_inside():
+    start("""
+        wheel = []
+        def on_wheel(amount): wheel.append(amount)
+        def draw(): pass
+    """)
+    m = pyctures.mouse
+    tick(events=[inp("pointermove", id=1, pt="mouse", x=10, y=10)])
+    assert (m.x, m.dx, m.inside) == (10, 0, True)   # its first place is not a movement
+    tick(events=[inp("pointermove", id=1, pt="mouse", x=25, y=4)])
+    assert (m.dx, m.dy) == (15, -6)
+    for number, name in ((0, "left"), (1, "middle"), (2, "right")):
+        tick(events=[inp("pointerdown", id=1, pt="mouse", x=25, y=4, button=number)])
+        assert m.down and m.button == name and len(pyctures.touches) == 1
+        tick(events=[inp("pointerup", id=1, pt="mouse", x=25, y=4, button=number)])
+        assert not m.down and m.button is None and pyctures.touches == []
+    tick(events=[inp("wheel", amount=120), inp("wheel", amount=-20)])
+    assert m.wheel == 100 and pyctures.S.ns["wheel"] == [120, -20]
+    assert repr(m) == "mouse(x=25, y=4, down=False, button=None, inside=True, dx=0, dy=0, wheel=100)"
+    tick()
+    assert m.wheel == 0
+    tick(events=[inp("pointermove", id=1, pt="mouse", x=900, y=4)])
+    assert not m.inside   # a drag that left the scene (it is 400 wide)
+
+
+def test_pinch_from_two_fingers_and_from_a_trackpad():
+    start("""
+        log = []
+        def on_pinch(scale, change): log.append((round(scale, 3), round(change, 3)))
+        def draw(): pass
+    """)
+    log, pinch = pyctures.S.ns["log"], pyctures.pinch
+    tick(events=[inp("pointerdown", id=1, pt="touch", x=100, y=100), inp("pointerdown", id=2, pt="touch", x=300, y=100)])
+    assert pinch.scale == 1
+    tick(events=[inp("pointermove", id=2, pt="touch", x=400, y=100)])
+    assert (pinch.scale, pinch.change, pinch.x, pinch.y) == (1.5, 1.5, 250, 100)
+    tick(events=[inp("pointermove", id=1, pt="touch", x=200, y=100)])
+    assert (pinch.scale, round(pinch.change, 3)) == (1.0, 0.667)
+    assert log == [(1.5, 1.5), (1.0, 0.667)]
+    tick()
+    assert pinch.change == 1
+    tick(events=[inp("pointerup", id=2, pt="touch", x=400, y=100)])
+    assert pinch.scale == 1 and "pinch(scale=1" in repr(pinch)
+    tick(events=[inp("pointerup", id=1, pt="touch", x=200, y=100)])
+    # A trackpad: the page sends each step's change.
+    del log[:]
+    tick(events=[inp("pinch", change=1.1, x=5, y=6), inp("pinch", change=1.1, x=5, y=6)])
+    assert (round(pinch.scale, 2), round(pinch.change, 2), pinch.x) == (1.21, 1.21, 5)
+    assert log == [(1.1, 1.1), (1.21, 1.1)]
+    pyctures._in.pinched_at -= 1   # as if a quarter of a second had passed
+    tick()
+    assert pinch.scale == 1 and pinch.change == 1
+
+
+def test_pressed_released_modifiers_codes_and_the_shift_fix():
+    start("""
+        log = []
+        def on_key_down(key, code): log.append(("down", key, code))
+        def on_key_up(key): log.append(("up", key))
+        def on_key_repeat(key, code): repeats.append(key)
+        repeats = []
+        def draw(): pass
+    """)
+    log, keys = pyctures.S.ns["log"], pyctures.keys
+    tick(events=[inp("keydown", key="Shift", code="ShiftLeft", m=1), inp("keydown", key="A", code="KeyA", m=1)])
+    assert keys == {"Shift", "A"} and keys.shift and not keys.ctrl
+    assert keys.codes == {"ShiftLeft", "KeyA"} and pyctures.pressed == {"Shift", "A"}
+    assert repr(keys) == "keys({'A', 'Shift'}, shift=True)"
+    tick(events=[inp("keydown", key="A", code="KeyA", m=1, r=1)])   # the keyboard repeating
+    assert pyctures.pressed == set() and len(log) == 2 and pyctures.S.ns["repeats"] == ["A"]
+    # Shift let go first: the page now calls the key "a", and "A" is what must come out.
+    tick(events=[inp("keyup", key="Shift", code="ShiftLeft", m=0), inp("keyup", key="a", code="KeyA", m=0)])
+    assert keys == set() and keys.codes == set() and not keys.shift
+    assert pyctures.released == {"Shift", "A"}
+    assert log == [("down", "Shift", "ShiftLeft"), ("down", "A", "KeyA"), ("up", "Shift"), ("up", "A")]
+    tick()
+    assert pyctures.released == set() and repr(keys) == "keys()"
+    # Two keys with one name: it stays while either is held.
+    tick(events=[inp("keydown", key="Shift", code="ShiftLeft", m=1), inp("keydown", key="Shift", code="ShiftRight", m=1),
+                 inp("keyup", key="Shift", code="ShiftLeft", m=1)])
+    assert keys == {"Shift"} and keys.codes == {"ShiftRight"}
+    tick(events=[inp("keydown", key="b", code="KeyB", m=10), inp("blur")])
+    assert keys == set() and keys.codes == set() and not keys.ctrl and not keys.meta
+
+
+def test_a_loop_with_await_frame_sees_what_happened_once():
+    start("""
+        seen = []
+        while True:
+            await frame()
+            seen.append((sorted(pressed), mouse.wheel))
+    """)
+    tick()
+    tick(events=[inp("keydown", key="x", code="KeyX", m=0), inp("wheel", amount=3)])
+    tick()
+    assert pyctures.S.ns["seen"][-2:] == [(["x"], 3), ([], 0)]
+
+
+def test_vsync_is_another_name_for_frame():
+    start("""
+        n = 0
+        while True:
+            await vsync()
+            n += 1
+    """)
+    tick()
+    tick()
+    assert pyctures.S.ns["n"] == 2 and pyctures.vsync is pyctures.frame
+
+
+def test_names_the_file_makes_its_own_are_its_own():
+    r = start("""
+        pressed = False
+        touches = 3
+        def draw(): pass
+    """)
+    assert r["error"] is None and pyctures.S.ns["touches"] == 3 and pyctures.touches == []
+
+
 def test_callbacks_come_back_as_events():
     r = start("""
         seen = []

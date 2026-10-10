@@ -1,4 +1,7 @@
-# A spinning knot, for the example web page. Drag to turn it.
+# A turning knot, for the example web page (index.html beside this file).
+# Use: drag to turn it.
+# Try changing: 0xffb347, its colour.
+
 renderer = THREE.WebGLRenderer(canvas=canvas, antialias=True)
 renderer.setPixelRatio(pixel_ratio)
 renderer.setSize(width, height, False)

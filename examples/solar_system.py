@@ -1,8 +1,6 @@
-# A solar system in 3D.
-# Shows: groups (a planet in a turning group goes round the sun), a moon,
-# a point light at the sun, and 2,000 stars in one Points object.
-# Drag to look around, scroll to zoom. Click, then press the up and down
-# arrows to speed time up or slow it down.
+# Solar System: planets going round a sun in 3D, a moon, and 2,000 stars.
+# Use: drag to look around, scroll to zoom. Click, then the up and down arrows speed time up or slow it down.
+# Try changing: the table of planets: a colour, a size, how far out, how fast; 2000, how many stars.
 #
 # Run it:   pyctures run solar_system.py
 # Share it: pyctures build solar_system.py -o site/

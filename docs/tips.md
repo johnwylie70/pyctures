@@ -45,6 +45,20 @@ If a program does get stuck, the canvas stays blank or stops changing, and after
 - **With `pyctures run`**, add the missing `await frame()` and save: the stuck Python is stopped and the scene runs again. `Ctrl+C` in the terminal stops everything.
 - **In a built page**, Python runs in a background thread, so the page itself keeps working. Press **Stop** on the message, fix the loop, and build again.
 
+## Starting and stopping
+
+With `pyctures run`, and on a page you build, a scene starts as soon as the page opens, and starts again each time you save the file. It runs until you close the page, or press the Stop button the page shows. On a web page with several scenes, a scene that is scrolled out of view waits until it is in view again.
+
+In [Circuitry Studio](https://www.circuitry.dev) a scene starts by itself when its tab comes on screen, and the footer has Run and Stop; a scene also starts over a moment after you stop typing. To make a file wait for Run there, put this comment near the top, within the first 30 lines:
+
+```python
+# pyctures: manual
+def draw():
+    background("navy")
+```
+
+Outside Circuitry Studio the line is only a comment, and does nothing.
+
 ## When the canvas changes size
 
 The canvas follows the size of the window, or of the box it sits in on a web page. It changes size when you resize the window, rotate a tablet or turn a phone.
@@ -71,6 +85,21 @@ The canvas can be a tall, narrow phone or a wide desktop window. Work out positi
 ## Keyboard focus
 
 When a scene fills the page, key presses go straight to it. On a web page with other things on it, key presses go to a scene only after you click or tap it, so the page's own keys (scrolling with the arrows, typing in a box) keep working. If the arrow keys do nothing, click the scene first.
+
+A key's name is what the key types, so with Shift held the A key is `"A"`, not `"a"`. A game that uses letter keys can check both: `"a" in keys or "A" in keys`. Or ask for the key by its place on the keyboard, which Shift and the keyboard's language do not change: `"KeyA" in keys.codes`.
+
+To ask whether Shift, Control, Alt or Command is held, read `keys.shift`, `keys.ctrl`, `keys.alt` and `keys.meta`.
+
+For something that should happen once for each press, such as a jump or a shot, use `" " in pressed` in `update`, or the function `on_key_down`. `" " in keys` stays true for as long as the key is held. See [Once for each press](program-shape.md#once-for-each-press-pressed-and-released).
+
+## Fingers, the wheel and zooming
+
+- **More than one finger.** `mouse` follows the first finger only. `touches` has every finger that is down, and a pressed mouse button too. See [Every finger](program-shape.md#every-finger-touches).
+- **Zoom.** Multiply by `pinch.change` every frame for two fingers or a trackpad, and read `mouse.wheel` for the mouse wheel. See [Zooming](program-shape.md#zooming-pinch-and-the-wheel).
+- **The wheel belongs to the page** unless the scene names it. A scene that reads `mouse.wheel` or defines `on_wheel` keeps the wheel while the pointer is over it.
+- **Movement since the last frame.** `mouse.dx`, `mouse.dy`, `mouse.wheel`, `pinch.change`, `pressed` and `released` are set at the start of a frame and are back to nothing at the start of the next. Read them every frame, in `update` or in your loop.
+- **Reading them costs nothing.** The page tells Python what happened with each frame, so `mouse.x` or `touches` is an ordinary value: no `await`, and no frame spent.
+- **You do not need `add_event_listener` for these.** A listener of your own still works, for anything this list does not cover.
 
 ## Libraries
 

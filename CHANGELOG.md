@@ -1,6 +1,8 @@
 # Changes
 
-## Not yet released
+## 0.2.0 (2026-10-11)
+
+Everything written for 0.1.0 still runs. This release adds a quicker way to draw, a fuller way to read the keyboard, mouse and fingers, and sprites that can tell when they touch.
 
 ### New
 
@@ -9,13 +11,6 @@
 - **Where they are kept**: with `pyctures run`, real files beside the scene. On a web page or a built page, in the browser, for that scene alone (text in `localStorage`, databases in IndexedDB), and until the page is closed where the browser will keep nothing. In a browser, SQLite is loaded only for a scene that says `open_database`.
 - **`storage`**, for an app that shows scenes: `mount(el, { src, storage })` takes an object with any of `list`, `readText`, `writeText`, `readBytes` and `writeBytes`, so files and databases are real files where the app keeps them. See `docs/website.md`.
 - A new example, Top Scores, and a new page, `docs/files-and-databases.md`.
-
-## 0.2.0 (2026-10-10)
-
-Everything written for 0.1.0 still runs. This release adds a quicker way to draw, a fuller way to read the keyboard, mouse and fingers, and sprites that can tell when they touch.
-
-### New
-
 - **Plain drawing functions**, one call each, nothing to import: `background`, `circle`, `ellipse`, `rect`, `triangle`, `polygon`, `star`, `line`, `text` and `picture`. A shape takes its colour as the last argument, and `outline=` and `thickness=` draw its edge. `ctx` is still there for everything else.
 - **`random` and `pick`**: `random(1, 6)` is a whole number from 1 to 6, `random()` a fraction from 0 to 1, and `pick(list)` one thing from a list. `degrees(n)` gives an angle in degrees wherever an angle is wanted.
 - **Keyboard**: `pressed` and `released` hold the keys that went down and came up since the last frame. `keys.shift`, `keys.ctrl`, `keys.alt` and `keys.meta` say which of those are held, and `keys.codes` holds keys by their place on the keyboard (`"KeyW"`), so WASD works on any layout. `on_key_repeat(key, code)` is called while a key is held.

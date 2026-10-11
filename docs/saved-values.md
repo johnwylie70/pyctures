@@ -75,4 +75,4 @@ To start again from nothing, save the starting value: `save("best", 0)`.
 
 Keep what you save small: scores, names and settings, not pictures. A browser gives a site a few million characters in all.
 
-These are not the functions for files. Python's own `open()` reads a file that sits beside the scene ([Getting started](getting-started.md)).
+These are not the functions for files. `save_text`, `save_json` and `open_database` write files and databases that are also there next time, and `load_text` and `load_json` read them ([Files and databases](files-and-databases.md)). Python's own `open()` reads a file that sits beside the scene ([Getting started](getting-started.md)).

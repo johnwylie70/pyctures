@@ -57,6 +57,9 @@ These come ready to use, as well as `ctx`:
 | `pinch.scale`, `pinch.change`, `pinch.x`, `pinch.y` | Two fingers as a zoom: the scale since the pinch began, its change since the last frame, and its middle |
 | `load_image(address)` | Loads a picture to draw ([Images](#images)) |
 | `save(name, value)`, `load(name, otherwise)` | Keep a value for the next time the program runs, and get it back: a number, text, `True` or `False`, a list or a dictionary ([Saved values](saved-values.md)) |
+| `save_text(path, text)`, `load_text(path, otherwise)` | Write a text file, and read it back: what the file holds, or `otherwise` if there is no such file ([Files and databases](files-and-databases.md)) |
+| `save_json(path, value)`, `load_json(path, otherwise)` | The same for a value written as JSON: a number, text, `True` or `False`, a list or a dictionary |
+| `open_database(name)` | Opens a SQLite database, making it if it is new: `db = open_database("scores")`. Then `db.query(sql, values...)` gives a list of rows, each a dictionary; `db.run(sql, values...)` makes a change and gives the number of rows changed; `db.close()` finishes with it ([Databases](files-and-databases.md#databases)) |
 | `Sprite(picture, x, y, size=48)` | A moving picture with `x`, `y`, `vx`, `vy`, `angle`, `spin`, `size`, `visible`, `update(dt)` and `draw()`. The picture is an emoji, an image, or a function that draws it, given the sprite's size ([Sprites](drawing-2d.md#sprites)) |
 | `Sprite.box(x, y, width, height, colour)`, `Sprite.circle(x, y, size, colour)` | A plain coloured box or circle, hit-tested as the shape you see |
 | `sprite.touches(other)`, `sprite.hit(sprites)`, `sprite.contains(x, y)` | Do two sprites overlap; the first sprite in a list that it touches, or `None`; is a point on it. A sprite's `shape` is `"circle"` or `"box"` ([Sprites that touch](drawing-2d.md#sprites-that-touch)) |

@@ -50,7 +50,7 @@ def draw():
     circle(x, height / 2, 40, "gold")
 ```
 
-`update(dt)` is called before every `draw()`. `dt` is the time since the last frame, so `200 * dt` moves the circle 200 points a second on any screen. `global x` lets the function change the `x` made outside it. Change the 200 and run it again.
+`update(dt)` is called before every `draw()`. `dt` is the time since the last frame, in seconds: about a sixtieth of a second on most screens, and less on a faster one. It is there because screens do not all draw at the same rate, and a busy device can drop frames. A program that moved the circle a fixed amount every frame would run faster on one screen than on another. Multiplying by `dt` evens that out: `200 * dt` is 200 points a second everywhere, however many frames that second has. `global x` lets the function change the `x` made outside it. Change the 200 and run it again.
 
 ### Make it answer you
 
@@ -119,7 +119,7 @@ These four are in the examples folder as `hello.py`, `moving.py`, `follow.py` an
 | `--no-browser` | Do not open a browser. Open the address it prints yourself. |
 | `--host 0.0.0.0` | Listen on every network address, not only this computer. Only do this on a network you trust. |
 
-The scene runs as if started from its own folder, so `open("data.csv")` finds a file beside it, and `import helper` finds `helper.py` beside it.
+The scene runs as if started from its own folder, so `open("data.csv")` finds a file beside it, and `import helper` finds `helper.py` beside it. A scene can write files too, and keep a database: `save_text("notes.txt", words)` and `open_database("scores")` make `notes.txt` and `scores.db` in that folder ([Files and databases](files-and-databases.md)).
 
 `pyctures run` also takes a folder. It lists the scenes in it, and any web page in the folder runs its scenes with your Python (see [Use it on your website](website.md)).
 

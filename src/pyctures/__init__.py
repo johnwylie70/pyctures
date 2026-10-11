@@ -40,7 +40,7 @@ The host calls ``start(source, info_json)`` once, then ``tick(payload_json)``
 once per frame, and ``stop()``. Each returns a JSON reply:
 ``{"cmds", "out", "err", "running", "error", "errorLine"}``.
 """
-import sys, io, json, time, math, traceback, threading, types, linecache
+import sys, io, os, json, time, math, traceback, threading, types, linecache
 
 __version__ = "0.2.0"
 
@@ -51,6 +51,7 @@ USER_FILE = "main.py"
 H_WINDOW, H_CANVAS, H_THREE, H_CTX, H_ADDONS = 1, 2, 3, 4, 5
 H_DRAW = 7   # the page's plain drawing functions (6 is taken where Pyctures is built into an editor)
 H_SAVED = 8  # the page's keeper of saved values
+H_FILES = 9  # the page's keeper of files and databases
 
 
 class _State:
@@ -73,6 +74,9 @@ class _State:
         self.measuring = False   # measure mode: time each part of a frame
         self.sections = {}       # name -> ms this frame (measure mode)
         self.saved = {}          # name -> JSON text: what save() has kept
+        self.page_files = False  # files live in the page's storage: each one written is sent to it
+        self.files_dir = ""      # where the page put this scene's stored files (a browser); "" is the scene's folder
+        self.databases = []      # every database that is open
 
 
 # WHICH RUN A THREAD IS WORKING FOR. A host may run every frame as its own
@@ -883,6 +887,253 @@ def load(name, default=None):
         return default
 
 
+# ---------------------------------------------------------------- files and databases
+#
+# save_text("notes.txt", text), load_json("level.json", {}) and
+# open_database("scores"): files the program writes, there the next time it
+# runs. A path is from the scene's own folder and cannot leave it. A database is
+# SQLite, Python's own sqlite3, in one file: "scores" is the file scores.db.
+#
+# WHERE THE FILES ARE. Run by your own Python (`pyctures run`), they are real
+# files beside the scene and nothing more is needed. In a browser Python has a
+# file system of its own that is forgotten with the page, so the PAGE keeps the
+# files (the browser's storage, or what the app showing the scene gives it). As
+# with saved values, the page cannot be asked for a file and answer at once, so
+# before a scene starts it puts EVERY file the scene has stored into Python's
+# file system, and each file written is one command to it (handle H_FILES):
+# "text" with the path and the text, "bytes" with the path and the file in
+# base64. That is why load_text() can answer at once.
+#
+# A FOLDER FOR EACH SCENE. A page's scenes share one Python, and one file
+# system, so the page gives each scene a folder of its own for what it has
+# stored (info["files_in"]): two scenes can both keep scores.db. Reading looks
+# there first and then beside the scene, where the files that came with the
+# scene are, so a level.json that came with it is read until one is saved.
+#
+# A DATABASE IS SENT WHOLE, so not on every statement: what a frame changes is
+# finished (committed) and sent once, when the frame ends, and only if the file
+# is not what was last sent. close() sends it there and then.
+
+_sqlite = None  # Python's sqlite3, brought in by the first open_database()
+
+
+def _file_path(path, call, such_as="notes.txt"):
+    """A path as it is used: from the scene's folder, and never out of it."""
+    parts = [p for p in str(path).replace("\\", "/").split("/")
+             if p not in ("", ".", "..") and not p.endswith(":")]
+    if not parts:
+        raise ValueError('%s needs the name of a file, such as "%s"' % (call, such_as)) from None
+    return "/".join(parts)
+
+
+def _stored(path):
+    """Where a stored file really is: in the folder the page gave this scene, or else as the path says."""
+    return os.path.join(S.files_dir, path) if S.files_dir else path
+
+
+def _write_file(path, text, call):
+    try:
+        file = _stored(path)
+        folder = os.path.dirname(file)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        with open(file, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+    except (OSError, UnicodeError) as e:
+        raise OSError("%s could not write the file (%s)" % (call, getattr(e, "strerror", None) or e)) from None
+    if S.page_files:
+        S.cmds.append(["call", _user_line(), 0, H_FILES, "text", [path, text]])
+
+
+def save_text(path, text):
+    """Write a text file: save_text("notes.txt", "milk, eggs"). It replaces the file if it is there."""
+    call = 'save_text("%s", ...)' % (path,)
+    path = _file_path(path, call)
+    if not isinstance(text, str):
+        raise TypeError("%s was given something that is not text. Use save_json for numbers, lists "
+                        "and dictionaries, or str(...) to make text of it" % call) from None
+    _write_file(path, text, call)
+
+
+def load_text(path, default=None):
+    """What a text file holds, or the default if there is no such file: load_text("notes.txt", "")."""
+    return _read_file(path, 'load_text("%s")' % (path,), default)
+
+
+def _read_file(path, call, default):
+    path = _file_path(path, call)
+    # What the scene stored, then (in a browser) the file that came with the scene.
+    for file in ((_stored(path), path) if S.files_dir else (path,)):
+        try:
+            with open(file, encoding="utf-8", newline="") as f:
+                return f.read()
+        except (OSError, UnicodeError):
+            pass
+    return default
+
+
+def save_json(path, value):
+    """Write a value as a JSON file: save_json("level.json", {"walls": [[1, 2], [3, 4]]}).
+    Numbers, text, True and False, lists and dictionaries."""
+    call = 'save_json("%s", ...)' % (path,)
+    path = _file_path(path, call)
+    try:
+        text = json.dumps(value, allow_nan=False)
+    except (TypeError, ValueError):
+        raise TypeError("%s was given something it cannot keep. "
+                        "It can keep numbers, text, True and False, lists and dictionaries" % call) from None
+    _write_file(path, text, call)
+
+
+def load_json(path, default=None):
+    """The value in a JSON file, or the default if there is no such file: load_json("level.json", {})."""
+    text = _read_file(path, 'load_json("%s")' % (path,), None)
+    if text is None:
+        return default
+    try:
+        return json.loads(text)
+    except ValueError as e:
+        raise ValueError('load_json("%s") found the file, but what is in it is not JSON (%s)' % (path, e)) from None
+
+
+def _short(sql):
+    sql = " ".join(str(sql).split())
+    return sql if len(sql) <= 60 else sql[:57] + "..."
+
+
+class Database:
+    """A SQLite database in a file, from open_database("scores")."""
+
+    def __init__(self, path, conn, file):
+        self.path = path
+        self._file = file       # where the file really is (see _stored)
+        self._conn = conn
+        self._changed = False   # something may have been written since the file was last kept
+        self._sent = None       # the file as the page last had it (in a browser)
+
+    def _do(self, call, sql, values):
+        if self._conn is None:
+            raise ValueError('%s("%s") was called after close(). Open the database again with '
+                             'open_database("%s")' % (call, _short(sql), self.path)) from None
+        if len(values) == 1 and isinstance(values[0], (list, tuple, dict)):
+            values = values[0]
+        try:
+            return self._conn.execute(sql, values)
+        except (_sqlite.Error, _sqlite.Warning, TypeError, ValueError, OverflowError) as e:
+            raise ValueError('%s("%s") did not work. SQLite says: %s' % (call, _short(sql), e)) from None
+
+    def query(self, sql, *values):
+        """Ask a question: a list of rows, each a dictionary by column name.
+        db.query("select name, points from best where points > ?", 10)"""
+        cur = self._do("query", sql, values)
+        try:
+            names = [d[0] for d in cur.description or ()]
+            rows = [dict(zip(names, row)) for row in cur.fetchall()]
+        except (_sqlite.Error, _sqlite.Warning) as e:
+            raise ValueError('query("%s") did not work. SQLite says: %s' % (_short(sql), e)) from None
+        if self._conn.in_transaction:
+            self._changed = True
+        return rows
+
+    def run(self, sql, *values):
+        """Make a change, and say how many rows it changed:
+        db.run("insert into best values (?, ?)", "Ann", 12)"""
+        cur = self._do("run", sql, values)
+        self._changed = True
+        return max(0, cur.rowcount)
+
+    def close(self):
+        """Finish with the database. What it holds is kept."""
+        if self._conn is None:
+            return
+        _keep_database(self, _user_line())
+        _shut_database(self)
+        if self in S.databases:
+            S.databases.remove(self)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+def _keep_database(db, line=0):
+    """Make what was changed last: finish the writes and, in a browser, send the page the file."""
+    if db._conn is None or not db._changed:
+        return
+    db._changed = False
+    try:
+        if db._conn.in_transaction:
+            db._conn.commit()
+        if S.page_files:
+            with open(db._file, "rb") as f:
+                data = f.read()
+            if data != db._sent:
+                import base64
+                db._sent = data
+                S.cmds.append(["call", line, 0, H_FILES, "bytes", [db.path, base64.b64encode(data).decode("ascii")]])
+    except Exception as e:  # noqa: BLE001 — a frame still has to be answered
+        S.err.write("The database %s could not be kept (%s)\n" % (db.path, e))
+
+
+def _shut_database(db):
+    conn, db._conn = db._conn, None
+    try:
+        if conn.in_transaction:
+            conn.commit()
+        conn.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _close_databases(state):
+    """A run has ended: its databases are finished with."""
+    for db in state.databases:
+        if db._conn is not None:
+            _shut_database(db)
+    state.databases = []
+
+
+def open_database(name):
+    """Open a SQLite database, making it if it is new: db = open_database("scores").
+    Then rows = db.query("select ..."), db.run("insert ...") and db.close()."""
+    global _sqlite
+    call = 'open_database("%s")' % (name,)
+    path = _file_path(name, call, "scores")
+    if "." not in path.rsplit("/", 1)[-1]:
+        path += ".db"
+    if _sqlite is None:
+        try:
+            import sqlite3
+        except ImportError:
+            raise RuntimeError("%s could not load SQLite. In a browser it is loaded for a scene whose own "
+                               "file says open_database, so call it from there" % call) from None
+        _sqlite = sqlite3
+    file = _stored(path)
+    try:
+        folder = os.path.dirname(file)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        if file != path and not os.path.exists(file) and os.path.isfile(path):
+            # A database that came with the scene: the scene's own copy starts as that one.
+            import shutil
+            shutil.copyfile(path, file)
+        # A host may run each frame on a thread of its own, so the connection is not tied to one.
+        conn = _sqlite.connect(file, check_same_thread=False)
+    except (OSError, _sqlite.Error) as e:
+        raise ValueError("%s could not open the file %s. SQLite says: %s" % (call, path, e)) from None
+    db = Database(path, conn, file)
+    if S.page_files:
+        try:
+            with open(file, "rb") as f:
+                db._sent = f.read()
+        except OSError:
+            pass
+    S.databases.append(db)
+    return db
+
+
 # ---------------------------------------------------------------- hit-testing
 #
 # Numbers in, yes or no out. Nothing here knows what a sprite is, so a game
@@ -1248,6 +1499,7 @@ EXPORTS = ("js", "canvas", "ctx", "THREE", "addons", "frame", "vsync", "flush", 
            "keys", "mouse", "pressed", "released", "touches", "pinch",
            "circle", "rect", "line", "text", "background", "triangle", "ellipse", "polygon", "star",
            "picture", "random", "pick", "degrees", "save", "load",
+           "save_text", "load_text", "save_json", "load_json", "open_database",
            "Sprite", "remove", "load_image", "Event", "measure")
 
 
@@ -1411,6 +1663,8 @@ def _format_error(e):
 
 
 def _reply(error=None, error_line=0):
+    for db in S.databases:
+        _keep_database(db)   # once a frame, however many statements it ran
     cmds, S.cmds = S.cmds, []
     out = S.out.getvalue()
     err = S.err.getvalue()
@@ -1506,6 +1760,7 @@ def _call_frame_functions(dt):
 def start(source, info_json):
     """Run the file's top level. Returns the first frame's reply (JSON)."""
     _latest[0].stopped = True
+    _close_databases(_latest[0])
     _latest[0] = _State()
     _tls.state = _latest[0]
     # FRESH ROOT NAMES EVERY RUN. A name like `js` remembers what was looked
@@ -1524,6 +1779,9 @@ def start(source, info_json):
     saved = info.get("saved")
     if isinstance(saved, dict):
         S.saved = {str(k): v for k, v in saved.items() if isinstance(v, str)}
+    # In a browser the page keeps the files; a host that keeps them for another Python says so.
+    S.files_dir = str(info.get("files_in") or "")
+    S.page_files = bool(S.files_dir) or sys.platform == "emscripten" or bool(info.get("page_keeps_files"))
     ns = {"__name__": "__main__", "__builtins__": _scene_builtins()}
     for name in EXPORTS:
         ns[name] = globals()[name]
@@ -1605,6 +1863,7 @@ def stop():
     S.stopped = True
     S.ns = None
     S.tasks = []
+    _close_databases(_latest[0])
     DBG.action = "stop"
     tid = S.thread
     # Only while a frame is actually running: a finished frame's thread id may

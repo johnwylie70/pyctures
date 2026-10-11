@@ -27,6 +27,8 @@ These are ready in every file, with no import:
 | `Sprite`, `load_image` | Moving pictures that can tell when they touch, and loading an image. See [Sprites](drawing-2d.md#sprites). |
 | `remove` | Takes a thing out of a list: `remove(rocks, rock)`. |
 | `save`, `load` | Keep a value for the next time the program runs: `save("best", 120)`, `load("best", 0)`. See [Saved values](saved-values.md). |
+| `save_text`, `load_text`, `save_json`, `load_json` | Write a file and read it back: `save_text("notes.txt", words)`, `load_json("level.json", {})`. See [Files and databases](files-and-databases.md). |
+| `open_database` | A SQLite database: `db = open_database("scores")`, then `db.query(...)` and `db.run(...)`. |
 | `Event` | The type of the event a callback receives. |
 | `js` | Everything else the page has, for when you need it. |
 

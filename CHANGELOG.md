@@ -1,5 +1,15 @@
 # Changes
 
+## Not yet released
+
+### New
+
+- **Files**: `save_text("notes.txt", words)` and `save_json("level.json", value)` write a file, and `load_text("notes.txt", "")` and `load_json("level.json", {})` give back what it holds, or the second value if there is no such file. A path is from the scene's folder and cannot leave it.
+- **Databases**: `db = open_database("scores")` opens a SQLite database (the file `scores.db`), making it if it is new. `db.query(sql, values...)` gives a list of rows, each a dictionary by column name; `db.run(sql, values...)` makes a change and gives the number of rows it changed; `db.close()` finishes with it. Values after the SQL go into its `?` marks in order.
+- **Where they are kept**: with `pyctures run`, real files beside the scene. On a web page or a built page, in the browser, for that scene alone (text in `localStorage`, databases in IndexedDB), and until the page is closed where the browser will keep nothing. In a browser, SQLite is loaded only for a scene that says `open_database`.
+- **`storage`**, for an app that shows scenes: `mount(el, { src, storage })` takes an object with any of `list`, `readText`, `writeText`, `readBytes` and `writeBytes`, so files and databases are real files where the app keeps them. See `docs/website.md`.
+- A new example, Top Scores, and a new page, `docs/files-and-databases.md`.
+
 ## 0.2.0 (2026-10-10)
 
 Everything written for 0.1.0 still runs. This release adds a quicker way to draw, a fuller way to read the keyboard, mouse and fingers, and sprites that can tell when they touch.

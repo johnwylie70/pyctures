@@ -66,7 +66,7 @@ Put these on the `<div>`:
 | Attribute | What it does |
 |---|---|
 | `data-pyctures-src="game.py"` | The scene's Python file, relative to the page. Required. |
-| `data-pyctures-files="words.txt,maps/level1.json"` | Files the scene opens with `open()` or imports, fetched before it starts. |
+| `data-pyctures-files="words.txt,maps/level1.json"` | Files the scene opens with `open()`, `load_text` or `load_json`, or imports, fetched before it starts. |
 | `data-pyctures-background="#ffffff"` | The colour behind the canvas while the scene loads. |
 | `data-pyctures-output="panel"` | Show printed text over the bottom of the scene, not only in the console. |
 | `data-pyctures-fullpage` | The scene is the whole page: it has the keyboard from the start. |
@@ -87,7 +87,38 @@ const scene = mount(document.querySelector("#game"), { src: "game.py" })
 await scene.destroy()
 ```
 
+The second argument takes `src`, `files` (a list of paths), `background`, `output` and `fullPage`, as the attributes do, and one setting that has no attribute: `storage`, below.
+
 Set `window.PYCTURES_NO_AUTO = true` before the script loads to stop it starting every `[data-pyctures-src]` by itself, and `window.PYCTURES_PYODIDE_URL` to load Pyodide from somewhere other than its official CDN (your own copy, for example).
+
+### Files and databases
+
+A scene can write files and keep SQLite databases: `save_text`, `save_json`, `open_database` ([Files and databases](files-and-databases.md)). On a web page they are kept in the visitor's browser, for that scene alone, and you need do nothing:
+
+- a text or JSON file is one entry in `localStorage`, under `pyctures:<the scene's address>:file:<path>`;
+- a database is its file's bytes in IndexedDB (a database called `pyctures`, a store called `files`), under the same key;
+- where the browser will keep neither, they last until the page is closed.
+
+An app that shows scenes, and has somewhere better to put files (a phone's or a computer's own file system, a server), gives `mount` a `storage`: an object with any of these five functions. Each returns a promise.
+
+```js
+mount(el, {
+  src: "game.py",
+  storage: {
+    list: async () => ["notes.txt", "scores.db"],     // every path the scene has stored
+    readText: async (path) => "…" /* or null */,
+    writeText: async (path, text) => {},
+    readBytes: async (path) => new Uint8Array() /* or null */,
+    writeBytes: async (path, bytes) => {},            // bytes is a Uint8Array
+  },
+})
+```
+
+- **A host only ever sees files.** A path is as the scene wrote it, with `/` between folders and no `.` or `..` in it: `notes.txt`, `levels/one.json`. A database is the file `scores.db`, written whole.
+- **Whatever you leave out, the browser does** as above. Give only `readText` and `writeText`, and databases stay in IndexedDB.
+- **Every stored file is read before the scene starts.** Python cannot wait for an answer in the middle of a frame, so the page asks `list()` for the paths, reads each one (`readBytes` first, then `readText` if that gave `null`), and hands them all to Python. So `list()` should give only that scene's files, and they should be small enough to read each time it starts. Without `list()`, the page notes the paths it has written through your functions (in `localStorage`) and reads those.
+- **Writes arrive in order,** each as the scene makes it: a text file when it is saved, a database at most once a frame, when a frame changed it. A write that fails is reported once in the console and the scene carries on.
+- **With `pyctures run` none of this is used:** the files are real ones beside the scene.
 
 ## Try the example
 

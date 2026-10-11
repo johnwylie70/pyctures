@@ -17,6 +17,9 @@ npm/LICENSE
 npm/THIRD-PARTY-NOTICES
 npm/*.tgz
 
+# written by examples that keep a database, when they are run
+examples/*.db
+
 # Owner notes, kept locally
 PUBLISHING.md
 .circuitry/

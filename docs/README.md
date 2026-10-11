@@ -16,6 +16,7 @@ These pages are adapted from the Pyctures help in [Circuitry Studio](https://www
 - [3D scenes](3d.md)
 - [Colours](colours.md)
 - [Saved values](saved-values.md): keep a best score for next time
+- [Files and databases](files-and-databases.md): write a text or JSON file, and keep rows in a SQLite database
 - [Bringing a JavaScript example across](from-javascript.md)
 - [Use it on your website](website.md)
 
@@ -32,6 +33,7 @@ These pages are adapted from the Pyctures help in [Circuitry Studio](https://www
 
 ## Look things up
 
+- [Function index](function-index.md): every name a scene can use, by area, one line each
 - [2D functions](2d-functions.md)
 - [3D functions](3d-functions.md)
 - [Finding mistakes](finding-mistakes.md)

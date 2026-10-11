@@ -50,7 +50,7 @@ def draw():
     circle(x, height / 2, 40, "gold")
 ```
 
-`update(dt)` is called before every `draw()`. `dt` is the time since the last frame, so `200 * dt` moves the circle 200 points a second on any screen. `global x` lets the function change the `x` made outside it. Change the 200 and run it again.
+`update(dt)` is called before every `draw()`. `dt` is the time since the last frame, in seconds: about a sixtieth of a second on most screens, and less on a faster one. It is there because screens do not all draw at the same rate, and a busy device can drop frames. A program that moved the circle a fixed amount every frame would run faster on one screen than on another. Multiplying by `dt` evens that out: `200 * dt` is 200 points a second everywhere, however many frames that second has. `global x` lets the function change the `x` made outside it. Change the 200 and run it again.
 
 **3. Make it answer you.**
 
@@ -104,7 +104,7 @@ def draw():
 
 A `Sprite` is a picture that moves, here an emoji, and `touches` says when two of them meet. Move the mouse, or drag a finger, to catch the stars.
 
-These four are in the examples folder as `hello.py`, `moving.py`, `follow.py` and `first_game.py`. The tutorials carry on from here: [your first drawing](docs/tutorials/first-drawing.md), [a bouncing ball](docs/tutorials/bouncing-ball.md), [a simple game](docs/tutorials/game.md) and [Space Rocks](docs/tutorials/space-rocks.md). The plain functions (`background`, `circle`, `rect`, `line`, `text`) cover a first picture; for everything else there is `ctx`, the web's own 2D drawing surface ([Drawing in 2D](docs/drawing-2d.md)). `save("best", score)` keeps a value and `load("best", 0)` gives it back the next time the scene runs ([Saved values](docs/saved-values.md)).
+These four are in the examples folder as `hello.py`, `moving.py`, `follow.py` and `first_game.py`. The tutorials carry on from here: [your first drawing](docs/tutorials/first-drawing.md), [a bouncing ball](docs/tutorials/bouncing-ball.md), [a simple game](docs/tutorials/game.md) and [Space Rocks](docs/tutorials/space-rocks.md). The plain functions (`background`, `circle`, `rect`, `line`, `text`) cover a first picture; for everything else there is `ctx`, the web's own 2D drawing surface ([Drawing in 2D](docs/drawing-2d.md)). `save("best", score)` keeps a value and `load("best", 0)` gives it back the next time the scene runs ([Saved values](docs/saved-values.md)). A scene can also write files and keep a SQLite database: `save_text("notes.txt", words)`, `load_json("level.json", {})`, and `db = open_database("scores")` with `db.query(...)` and `db.run(...)` ([Files and databases](docs/files-and-databases.md)).
 
 ## Run it
 
@@ -244,6 +244,7 @@ In [`examples/`](examples), each with a comment at the top saying what it shows.
 | `brick_breaker.py` | Brick Breaker: a bat, a ball and a wall of bricks |
 | `snake.py` | Snake: a game on a grid, with a best score that is kept |
 | `high_score.py` | A best score that is still there next time: `save` and `load` |
+| `top_scores.py` | Every game written into a database, and the best five shown: `open_database` |
 | `cube_dodge.py` | A 3D game: dodge the oncoming blocks |
 | `lit_scene.py` | Shapes on a floor with a spotlight and shadows |
 | `bouncing_balls.py` | A 2D animation with trails; click to add balls |
@@ -266,7 +267,7 @@ pyctures run examples            # a list of them all
 
 ## Docs
 
-Start with [Getting started](docs/getting-started.md), then [how a program is shaped](docs/program-shape.md), [drawing in 2D](docs/drawing-2d.md), [3D scenes](docs/3d.md), [colours](docs/colours.md), [saved values](docs/saved-values.md), and [tips](docs/tips.md). The [2D functions](docs/2d-functions.md) and [3D functions](docs/3d-functions.md) pages list everything, one line each. Seven tutorials are in [docs/tutorials](docs/tutorials).
+Start with [Getting started](docs/getting-started.md), then [how a program is shaped](docs/program-shape.md), [drawing in 2D](docs/drawing-2d.md), [3D scenes](docs/3d.md), [colours](docs/colours.md), [saved values](docs/saved-values.md), and [tips](docs/tips.md). The [2D functions](docs/2d-functions.md) and [3D functions](docs/3d-functions.md) pages list everything, one line each. The [function index](docs/function-index.md) names every function by area, with a link to where it is explained. Seven tutorials are in [docs/tutorials](docs/tutorials).
 
 
 ## Pyctures in Circuitry Studio

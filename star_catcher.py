@@ -1,6 +1,6 @@
-# Star Catcher: a 2D game.
-# Shows: Sprite (emoji pictures that move), keys and mouse input, a score and lives.
-# Move with the arrow keys, or drag. Catch the stars, dodge the rocks.
+# Star Catcher: a game with emoji sprites. Catch the stars and dodge the rocks; you have three lives.
+# Use: the left and right arrow keys, or drag. Space or a tap plays again.
+# Try changing: 0.6, the seconds between new stars; 320, how fast the rocket moves; the emoji.
 #
 # Run it:   pyctures run star_catcher.py
 # Share it: pyctures build star_catcher.py -o site/

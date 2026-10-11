@@ -1,4 +1,8 @@
 # Wave Grid: 225 cubes rising and falling like water.
+# Try changing: n, the cubes along each side; 0.8, the height and the width of the waves.
+#
+# Run it:   pyctures run wave_grid.py
+
 import math
 
 renderer = THREE.WebGLRenderer(canvas=canvas, antialias=True)

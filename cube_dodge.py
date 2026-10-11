@@ -1,6 +1,6 @@
-# Cube Dodge: a 3D game.
-# Shows: a three.js scene driven from Python, shadows, fog, and keyboard input.
-# Move left and right with the arrow keys, or drag. Dodge the red blocks.
+# Cube Dodge: a 3D game. Blocks come towards you and you roll a ball out of their way.
+# Use: the left and right arrow keys, or drag.
+# Try changing: -4, -2, 0, 2, 4, the places a block can come; the colours, written like 0x22304a.
 #
 # Run it:   pyctures run cube_dodge.py
 # Share it: pyctures build cube_dodge.py -o site/

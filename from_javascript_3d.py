@@ -1,8 +1,5 @@
-# Brought across from JavaScript: the classic spinning cube from a three.js
-# example, line for line in Python.
-# Shows: new X() becomes X(), {color: ...} becomes color=..., and the
-# animation loop becomes draw().
-# See docs/from-javascript.md for the JavaScript it came from.
+# From JavaScript, 3D: the spinning cube of many three.js examples, line for line in Python.
+# Try changing: 0.01 and 0.015, how fast it turns each way; 0x44aaff, its colour.
 #
 # Run it:   pyctures run from_javascript_3d.py
 # Share it: pyctures build from_javascript_3d.py -o site/

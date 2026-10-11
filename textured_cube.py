@@ -1,9 +1,9 @@
-# A textured cube: a picture from a file, wrapped round a turning crate.
-# Shows: THREE.TextureLoader().load() with a path beside the scene, and map= on a material.
-# Drag to turn it.
+# Textured Cube: a picture from a file, wrapped round a turning crate.
+# Use: drag to turn it.
+# Try changing: "textures/crate.png" to a picture of your own, beside the file; 0.008, how fast it turns.
 #
 # Run it:   pyctures run textured_cube.py
-# Share it: pyctures build textured_cube.py -o site/   (textures/crate.png goes with it)
+# Share it: pyctures build textured_cube.py -o site/
 
 renderer = THREE.WebGLRenderer(canvas=canvas, antialias=True)
 renderer.setPixelRatio(pixel_ratio)

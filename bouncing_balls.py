@@ -1,6 +1,6 @@
-# Bouncing balls: a 2D animation with trails.
-# Shows: update(dt) and draw(), hsl() colours, and on_mouse_down.
-# Click or tap to add a ball.
+# Bouncing Balls: balls of many colours fall, bounce and leave trails.
+# Use: click or tap to add a ball.
+# Try changing: 600, the pull of gravity; 0.85, how much speed a bounce keeps; 0.25, how fast the trails fade.
 #
 # Run it:   pyctures run bouncing_balls.py
 # Share it: pyctures build bouncing_balls.py -o site/

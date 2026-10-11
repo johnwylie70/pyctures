@@ -11,7 +11,8 @@
  * THE RENDERER keeps a handle table (number -> JavaScript value), replays the
  * commands the Python half (`pyctures/__init__.py`) records, answers reads, and
  * reports input. Fixed handles (they must match the Python half): 1 window,
- * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons.
+ * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons,
+ * 7 plain drawing, 8 saved values, 9 files and databases.
  *
  * THE PAGE'S MAIN THREAD only draws: Python runs in your own Python (`run`) or
  * in a worker (`build`), so a slow frame, Python's garbage collection or a
@@ -52,6 +53,202 @@ function prop(obj, name) {
     if (c in Object(obj)) return c
   }
   return name
+}
+
+// ---------------------------------------------------------------- saved values
+
+/**
+ * SAVED VALUES: Python's save("best", 120) and load("best", 0). A value is kept as JSON text
+ * in the page's localStorage, one entry for each name, under `pyctures:<the scene>:<name>`, so
+ * two scenes on one site never read each other's and nothing else the page keeps is touched.
+ * Python is handed all of them when a scene starts (`all`), because load() must answer at
+ * once, and sends each save() as a command (`save`). Where the page has no storage (a private
+ * window, a frame that is refused it) or it is full, what is saved is kept here instead, for
+ * as long as the page is open.
+ */
+const KEPT = new Map()
+function savedValues(scene) {
+  const under = `pyctures:${scene}:`
+  return {
+    all() {
+      const out = {}
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          // `file:` entries are files (see sceneFiles), not values.
+          if (key && key.startsWith(under) && !key.startsWith(under + 'file:')) out[key.slice(under.length)] = localStorage.getItem(key)
+        }
+      } catch (e) { /* no storage */ }
+      for (const [key, kept] of KEPT) if (key.startsWith(under)) out[key.slice(under.length)] = kept
+      return out
+    },
+    save(name, kept) {
+      KEPT.set(under + name, kept)
+      try {
+        localStorage.setItem(under + name, kept)
+      } catch (e) {
+        // No storage, or it is full: the scene carries on, and the value lasts while the page is open.
+        if (!KEPT.warned) console.warn(`save("${name}", …): the browser would not keep it (${(e && e.message) || e}), so it will be forgotten when the page is closed`)
+        KEPT.warned = true
+      }
+    },
+  }
+}
+
+// ---------------------------------------------------------------- files and databases
+
+/**
+ * FILES AND DATABASES: Python's save_text("notes.txt", …), save_json(…) and
+ * open_database("scores"). Python (Pyodide) has a file system of its own that is forgotten
+ * with the page, so the page keeps the files. Python cannot ask for one and be answered at
+ * once, so EVERY file a scene has stored is put into Python's file system before the scene
+ * starts (`all`, into a folder of the scene's own: see storedIn), and Python sends each file it writes as a command: `text` with the path and
+ * the text, `bytes` with the path and the file in base64 (a database, whole, at most once a
+ * frame). With `pyctures run` none of this is used: the files are real ones beside the scene.
+ *
+ * WHERE THEY ARE KEPT. A host showing the scene can give `storage`, an object with any of
+ *   list() -> Promise<string[]>                 the paths the scene has stored
+ *   readText(path) -> Promise<string | null>    writeText(path, text) -> Promise
+ *   readBytes(path) -> Promise<Uint8Array | null>   writeBytes(path, bytes) -> Promise
+ * so that they are real files on the device; a database is just the file `scores.db`. What
+ * the host leaves out is done here: text in localStorage, one entry for each file, under
+ * `pyctures:<the scene>:file:<path>`; bytes in IndexedDB (database `pyctures`, store `files`)
+ * under the same key. Where the browser will not keep one, it is kept here instead for as
+ * long as the page is open. A host that writes but has no list() cannot say what it holds,
+ * so the paths written through it are noted in localStorage (`pyctures:<the scene>:file:`).
+ *
+ * At the start each path is read as bytes first and, if there are none, as text.
+ */
+const KEPT_FILES = new Map()
+let bytesDb = null
+/** The page's IndexedDB for bytes, opened once; null where there is none. */
+function openBytes() {
+  if (!bytesDb) {
+    bytesDb = new Promise((resolve) => {
+      try {
+        const req = indexedDB.open('pyctures', 1)
+        req.onupgradeneeded = () => req.result.createObjectStore('files')
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = req.onblocked = () => resolve(null)
+      } catch (e) { resolve(null) }
+    })
+  }
+  return bytesDb
+}
+/** One piece of work on the bytes store: resolves to its result once it is safely done. */
+async function inBytes(mode, work) {
+  const db = await openBytes()
+  if (!db) throw new Error('no IndexedDB')
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('files', mode)
+    const req = work(tx.objectStore('files'))
+    tx.oncomplete = () => resolve(req.result)
+    tx.onerror = tx.onabort = () => reject(tx.error || req.error || new Error('IndexedDB would not'))
+  })
+}
+const cleanPath = (path) => String(path).split('/').filter((p) => p && p !== '.' && p !== '..').join('/')
+
+/** The browser's own keeping of one scene's files: the same five calls a host can give. */
+function browserFiles(under) {
+  const memory = (path, data, e) => {
+    KEPT_FILES.set(under + path, data)
+    if (!KEPT_FILES.warned) console.warn(`${path}: the browser would not keep it (${(e && e.message) || e}), so it will be forgotten when the page is closed`)
+    KEPT_FILES.warned = true
+  }
+  return {
+    async list() {
+      const paths = new Set()
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith(under) && key.length > under.length) paths.add(key.slice(under.length))
+        }
+      } catch (e) { /* no storage */ }
+      try {
+        for (const key of await inBytes('readonly', (st) => st.getAllKeys(IDBKeyRange.bound(under, under + '￿')))) paths.add(key.slice(under.length))
+      } catch (e) { /* no storage */ }
+      for (const key of KEPT_FILES.keys()) if (key.startsWith(under)) paths.add(key.slice(under.length))
+      return Array.from(paths)
+    },
+    async readText(path) {
+      const kept = KEPT_FILES.get(under + path)
+      if (typeof kept === 'string') return kept
+      try { return localStorage.getItem(under + path) } catch (e) { return null }
+    },
+    async writeText(path, text) {
+      try { localStorage.setItem(under + path, text); KEPT_FILES.delete(under + path) } catch (e) { memory(path, text, e) }
+    },
+    async readBytes(path) {
+      const kept = KEPT_FILES.get(under + path)
+      if (kept instanceof Uint8Array) return kept
+      try { return (await inBytes('readonly', (st) => st.get(under + path))) || null } catch (e) { return null }
+    },
+    async writeBytes(path, bytes) {
+      try { await inBytes('readwrite', (st) => st.put(bytes, under + path)); KEPT_FILES.delete(under + path) } catch (e) { memory(path, bytes, e) }
+    },
+  }
+}
+
+/** One scene's files: `all()` for the start, `text` and `bytes` for what Python writes. `storage`: a host's (see above). */
+function sceneFiles(scene, storage) {
+  const under = `pyctures:${scene}:file:`
+  const own = browserFiles(under)
+  const host = storage || {}
+  const has = (name) => typeof host[name] === 'function'
+  const use = (name) => (has(name) ? host[name].bind(host) : own[name])
+  const noted = () => { try { return JSON.parse(localStorage.getItem(under) || '[]') } catch (e) { return [] } }
+  const note = (path) => {
+    try {
+      const paths = noted()
+      if (!paths.includes(path)) localStorage.setItem(under, JSON.stringify(paths.concat(path)))
+    } catch (e) { /* no storage: it is known for this run only */ }
+  }
+  let warned = false
+  const trouble = (path, e) => {
+    if (!warned) console.warn(`${path}: the storage this scene was given failed (${(e && e.message) || e})`)
+    warned = true
+  }
+  // Writes land in the order they were made, and a start waits for the last of them.
+  let last = Promise.resolve()
+  const write = (name, path, data) => {
+    path = cleanPath(path)
+    if (!path) return
+    last = last.then(() => use(name)(path, data)).then(() => { if (has(name) && !has('list')) note(path) }, (e) => trouble(path, e))
+  }
+  return {
+    /** Every file the scene has stored, as [{path, data}] (data: an ArrayBuffer of its own). */
+    async all() {
+      await last
+      const paths = new Set()
+      try {
+        if (has('list')) for (const p of (await host.list()) || []) paths.add(cleanPath(p))
+        // The browser's own, unless the host keeps everything.
+        if (!has('list') || !has('writeText') || !has('writeBytes')) for (const p of (await own.list()).concat(has('list') ? [] : noted())) paths.add(p)
+      } catch (e) { trouble('list()', e) }
+      const out = []
+      for (const path of paths) {
+        if (!path) continue
+        let data = null
+        try { data = await use('readBytes')(path) } catch (e) { trouble(path, e) }
+        if (data == null) {
+          try {
+            const text = await use('readText')(path)
+            if (text != null) data = new TextEncoder().encode(String(text))
+          } catch (e) { trouble(path, e) }
+        }
+        // A copy: a worker is GIVEN the buffer, and whoever kept the file must still have it.
+        if (data != null) out.push({ path, data: new Uint8Array(data).slice().buffer })
+      }
+      return out
+    },
+    text(path, text) { write('writeText', path, text) },
+    bytes(path, base64) {
+      const bin = atob(base64)
+      const bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      write('writeBytes', path, bytes)
+    },
+  }
 }
 
 // ---------------------------------------------------------------- images by relative path
@@ -107,13 +304,37 @@ function swapStrings(v, resolve) {
   }
 }
 
+// ---------------------------------------------------------------- what input a scene takes
+
+/** The scene's Python without its comments and strings. */
+const codeOf = (source) => source
+  .replace(/("""|''')[\s\S]*?\1/g, '""')
+  .replace(/(["'])(?:\\.|(?!\1)[^\\\n])*\1/g, '""')
+  .replace(/#.*$/gm, '')
+
 /**
- * The renderer for one canvas. `images`: a function from a string in the
+ * What a scene takes from the pointer, from the names in its code. `wheel`: it
+ * names the wheel (on_wheel, mouse.wheel), so the wheel is the scene's and the
+ * page does not scroll under it. `pinch`: it names the pinch, so a trackpad's
+ * pinch is the scene's and does not zoom the page. `pointer`: it uses the
+ * pointer at all, so a drag stays the scene's when it leaves the canvas and a
+ * right-click is a button, not a menu.
+ */
+export function inputOf(source) {
+  const code = codeOf(source || '')
+  const wheel = /\bon_wheel\b|\bmouse\s*\.\s*wheel\b/.test(code)
+  const pinch = /(?:^|[^.\w])pinch\b|\bon_pinch\b/.test(code)
+  const pointer = wheel || pinch || /\bmouse\b|\bon_mouse|(?:^|[^.\w])touches\b|\bon_touch|\badd(?:EventListener|_event_listener)\b|\bOrbitControls\b/.test(code)
+  return { pointer, wheel, pinch }
+}
+
+/**
+ * The renderer for one canvas. `input`: what the scene takes from the pointer (see inputOf). `images`: a function from a string in the
  * commands to the URL to use instead (see imageResolver), or null. `hooks`: onEvent(event), onSize(size),
  * onApplied({reads, errors, ms, n, timing}), onReads(reads) (a promise has
  * settled), isActive() (has the keyboard).
  */
-export function createRenderer(canvas, { three = null, addons = null, images = null, hooks }) {
+export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, hooks }) {
   const H = new Map()
   let ctx2d = null
   let dpr = 1, cssW = 0, cssH = 0
@@ -123,7 +344,8 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   const glRenderers = [], cameras = []
   let timing = null
   let isGL = false
-  let pointerIsDown = false
+  const takes = input || { pointer: false, wheel: false, pinch: false }
+  const pointersDown = new Set()
 
   function size() {
     dpr = window.devicePixelRatio || 1
@@ -238,6 +460,7 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
     if (h === 2) return 'canvas'
     if (h === 3) return 'THREE'
     if (h === 1) return 'js'
+    if (h === 7) return 'the plain drawing functions'
     const n = obj && obj.constructor && obj.constructor.name
     return n || 'this object'
   }
@@ -323,29 +546,216 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
     for (const cam of cameras) { try { cam.aspect = cssW / cssH; cam.updateProjectionMatrix() } catch (e) { /* not a camera any more */ } }
   }
 
+  // INPUT IS REPORTED, NEVER ASKED FOR. Each event goes to Python with the next
+  // frame, and the Python half keeps `keys`, `mouse`, `touches` and `pinch` from
+  // them (pyctures/__init__.py, `_input`). `m` is the modifier keys held, as bits:
+  // 1 Shift, 2 Control, 4 Alt, 8 Meta.
+  const modifiers = (e) => (e.shiftKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.altKey ? 4 : 0) | (e.metaKey ? 8 : 0)
   function sendInput(e) {
     const k = { type: e.type }
     if (e.type === 'keydown' || e.type === 'keyup') {
       if (!hooks.isActive()) return
-      if (e.repeat) return
-      k.key = e.key; k.code = e.code
+      // A repeat of a held key is sent too: Python tells it from the press by the key being held (on_key_repeat).
+      k.key = e.key; k.code = e.code; k.m = modifiers(e)
+      if (e.repeat) k.r = 1
       if (e.key.indexOf('Arrow') === 0 || e.key === ' ') e.preventDefault()
-    } else {
-      if (e.type === 'pointerdown') { pointerIsDown = true; canvas.focus({ preventScroll: true }) }
-      else if (e.type === 'pointerup') { if (!pointerIsDown) return; pointerIsDown = false }
+    } else if (e.type === 'blur') {
+      if (!hooks.isActive()) return
+    } else if (e.type !== 'pointerleave') {
+      if (e.type === 'pointerdown') {
+        pointersDown.add(e.pointerId)
+        canvas.focus({ preventScroll: true })
+        // A drag that leaves the scene is still the scene's.
+        if (takes.pointer) { try { canvas.setPointerCapture(e.pointerId) } catch (e2) { /* a pointer that has already gone */ } }
+        k.m = modifiers(e)
+      } else if (e.type === 'pointerup' || e.type === 'pointercancel') {
+        if (!pointersDown.delete(e.pointerId)) return
+      }
       const r = canvas.getBoundingClientRect()
       k.x = e.clientX - r.left; k.y = e.clientY - r.top; k.button = e.button
+      k.id = e.pointerId; k.pt = e.pointerType
     }
     hooks.onEvent({ k: 'input', e: k })
   }
+  // The wheel, for a scene that names it; a trackpad's pinch (the browser sends
+  // it as ctrl + wheel, Safari as gesture events) for a scene that names that.
+  // Under any other scene the wheel scrolls the page.
+  function sendPinch(e, change) {
+    const r = canvas.getBoundingClientRect()
+    hooks.onEvent({ k: 'input', e: { type: 'pinch', change, x: e.clientX - r.left, y: e.clientY - r.top } })
+  }
+  function sendWheel(e) {
+    if (e.ctrlKey && takes.pinch) {
+      e.preventDefault()
+      sendPinch(e, Math.exp(-Math.max(-50, Math.min(50, e.deltaY)) * 0.01))
+    } else if (takes.wheel) {
+      e.preventDefault()
+      // In points: a wheel that counts in lines or pages is turned into them.
+      const amount = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? cssH : 1)
+      if (amount) hooks.onEvent({ k: 'input', e: { type: 'wheel', amount } })
+    }
+  }
+  let gesture = 1
+  function sendGesture(e) {
+    e.preventDefault()
+    if (e.type === 'gesturestart') { gesture = 1; return }
+    if (pointersDown.size >= 2 || !(e.scale > 0)) return
+    sendPinch(e, e.scale / gesture)
+    gesture = e.scale
+  }
+  const noMenu = (e) => e.preventDefault()
 
   H.set(1, window); H.set(2, canvas)
   if (three) { H.set(3, three); H.set(5, addons) }
+  // PLAIN DRAWING: Python's circle, rect, line, text, background and the rest. Each is ONE
+  // command, done here in one go, so 2,000 circles are 2,000 commands and not 6,000. The rules
+  // are those of pictures.js: what is given (a colour, a thickness, a size) is set on ctx and
+  // stays. `how` is the shape's last argument, { outline, thickness } (Python's keyword
+  // arguments): with a colour it is a border, without one it is the edge alone.
+  function ctxFor(name) {
+    const c = glRenderers.length ? null : getCtx()
+    if (!c) throw new Error(name + '() draws on the 2D canvas, and this scene is 3D. Draw with THREE here')
+    return c
+  }
+  function paint(c, colour, how) {
+    if (how == null) {
+      if (colour != null) c.fillStyle = colour
+      c.fill()
+      return
+    }
+    const edge = how.outline != null || how.thickness != null
+    if (colour != null) c.fillStyle = colour
+    if (colour != null || !edge) c.fill()
+    if (edge) {
+      if (how.outline != null && how.outline !== true) c.strokeStyle = how.outline
+      if (how.thickness != null) c.lineWidth = how.thickness
+      c.stroke()
+    }
+  }
+  function corners(c, x, y, radius, n, inner) {
+    c.beginPath()
+    const step = Math.PI * 2 / n
+    for (let i = 0; i < n; i++) {
+      const r = inner && i % 2 ? inner : radius, a = i * step - Math.PI / 2
+      c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r)
+    }
+    c.closePath()
+  }
+  let fontSize = 0, fontOf = ''
+  const stamps = new Map()
+  const plainDrawing = {
+    circle(x, y, radius, colour, how) {
+      const c = ctxFor('circle')
+      c.beginPath(); c.arc(x, y, radius, 0, Math.PI * 2)
+      paint(c, colour, how)
+    },
+    ellipse(x, y, w, h, colour, how) {
+      const c = ctxFor('ellipse')
+      c.beginPath(); c.ellipse(x, y, Math.abs(w) / 2, Math.abs(h) / 2, 0, 0, Math.PI * 2)
+      paint(c, colour, how)
+    },
+    rect(x, y, w, h, colour, how) {
+      const c = ctxFor('rect')
+      if (how == null) {
+        if (colour != null) c.fillStyle = colour
+        c.fillRect(x, y, w, h)
+        return
+      }
+      c.beginPath()
+      if (how.round) c.roundRect(x, y, w, h, how.round)
+      else c.rect(x, y, w, h)
+      paint(c, colour, how)
+    },
+    triangle(x1, y1, x2, y2, x3, y3, colour, how) {
+      const c = ctxFor('triangle')
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.lineTo(x3, y3); c.closePath()
+      paint(c, colour, how)
+    },
+    polygon(x, y, radius, sides, colour, how) {
+      const c = ctxFor('polygon')
+      corners(c, x, y, radius, Math.max(3, Math.round(sides)), 0)
+      paint(c, colour, how)
+    },
+    star(x, y, radius, points, colour, how) {
+      const c = ctxFor('star')
+      corners(c, x, y, radius, Math.max(2, Math.round(points)) * 2, radius * (how && how.inner != null ? how.inner : 0.4))
+      paint(c, colour, how)
+    },
+    line(x1, y1, x2, y2, colour, thickness) {
+      const c = ctxFor('line')
+      if (colour != null) c.strokeStyle = colour
+      if (thickness != null) c.lineWidth = thickness
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke()
+    },
+    text(words, x, y, colour, size, align) {
+      const c = ctxFor('text')
+      if (colour != null) c.fillStyle = colour
+      if (size != null) {
+        if (size !== fontSize) { fontSize = size; fontOf = size + 'px system-ui, sans-serif' }
+        c.font = fontOf
+      }
+      if (align != null) {
+        const middle = align === 'centre' || align === 'center'
+        c.textAlign = middle ? 'center' : align
+        c.textBaseline = middle ? 'middle' : 'alphabetic'
+      }
+      c.fillText(String(words), x, y)
+    },
+    background(colour) {
+      const c = ctxFor('background')
+      if (colour == null) { c.clearRect(0, 0, cssW, cssH); return }
+      const was = c.fillStyle
+      c.fillStyle = colour; c.fillRect(0, 0, cssW, cssH); c.fillStyle = was
+    },
+    // An emoji or a word is drawn once into a small canvas and stamped from then on; an image
+    // (Python sends a file's picture as the image it loaded) draws once it has arrived.
+    picture(what, x, y, size) {
+      const c = ctxFor('picture')
+      if (typeof what === 'string') {
+        const key = size + '|' + what
+        let pic = stamps.get(key)
+        if (!pic) {
+          const px = Math.max(1, Math.round(size * 1.3 * dpr))
+          pic = document.createElement('canvas')
+          pic.width = pic.height = px
+          const g = pic.getContext('2d')
+          g.font = Math.floor(size * dpr) + 'px system-ui, sans-serif'
+          g.textAlign = 'center'
+          g.textBaseline = 'middle'
+          g.fillText(what, px / 2, px / 2 + size * dpr * 0.06)
+          stamps.set(key, pic)
+        }
+        const box = size * 1.3
+        c.drawImage(pic, x - box / 2, y - box / 2, box, box)
+        return
+      }
+      if (!what || what.complete === false || !what.naturalWidth) return
+      const w = size * what.naturalWidth / what.naturalHeight
+      c.drawImage(what, x - w / 2, y - size / 2, w, size)
+    },
+  }
+  H.set(7, plainDrawing)
+  // SAVED VALUES: Python's save(). With no keeper given, what is saved lasts for the run.
+  H.set(8, { save: (name, kept) => { if (saved) saved.save(String(name), String(kept)) } })
+  // FILES AND DATABASES: Python's save_text() and a database that changed. With no keeper given, they last for the run.
+  H.set(9, {
+    text: (path, text) => { if (files) files.text(String(path), String(text)) },
+    bytes: (path, base64) => { if (files) files.bytes(String(path), String(base64)) },
+  })
   window.addEventListener('keydown', sendInput)
   window.addEventListener('keyup', sendInput)
+  window.addEventListener('blur', sendInput)
   canvas.addEventListener('pointerdown', sendInput)
   canvas.addEventListener('pointermove', sendInput)
+  canvas.addEventListener('pointerleave', sendInput)
   window.addEventListener('pointerup', sendInput)
+  window.addEventListener('pointercancel', sendInput)
+  if (takes.wheel || takes.pinch) canvas.addEventListener('wheel', sendWheel, { passive: false })
+  if (takes.pinch) {
+    canvas.addEventListener('gesturestart', sendGesture)
+    canvas.addEventListener('gesturechange', sendGesture)
+  }
+  if (takes.pointer) canvas.addEventListener('contextmenu', noMenu)
 
   // PRESENT ON THE VERTICAL BLANK. A frame's commands are held and drawn in
   // the page's own animation frame, so every frame lands on a screen refresh.
@@ -378,7 +788,8 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   return {
     /** Queue one frame's commands; drawn on the next refresh. */
     push(cmds, at) {
-      if (images && cmds) swapStrings(cmds, images)
+      // Not a file's own text: that is the scene's to keep as it wrote it.
+      if (images && cmds) swapStrings(cmds.some((c) => c[0] === 'call' && c[3] === 9) ? cmds.filter((c) => !(c[0] === 'call' && c[3] === 9)) : cmds, images)
       pending.push({ cmds: cmds || [], at, recv: at ? abs() : 0 })
       if (!scheduled) { scheduled = true; requestAnimationFrame(present) }
     },
@@ -389,7 +800,9 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
       observer.disconnect()
       window.removeEventListener('keydown', sendInput)
       window.removeEventListener('keyup', sendInput)
+      window.removeEventListener('blur', sendInput)
       window.removeEventListener('pointerup', sendInput)
+      window.removeEventListener('pointercancel', sendInput)
       for (const g of glRenderers) { try { g.dispose() } catch (e) { /* already gone */ } }
       H.clear()
     },
@@ -507,6 +920,9 @@ def _pyctures_call(sid, op, a=None, b=None):
         return m.tick(a)
     m.stop()
     _pyctures_scenes.pop(sid, None)
+    if a:
+        import shutil
+        shutil.rmtree(a, ignore_errors=True)   # the scene's folder of stored files: the page has its own copy
     return 'stopped'
 `
 
@@ -530,6 +946,17 @@ function loadRuntime() {
   }
   return runtimePromise
 }
+
+/**
+ * The folder, in Pyodide's file system, for one run's stored files. A page's scenes share
+ * one Python and one file system, so each has its own (Python is told it as info.files_in)
+ * and two scenes can both keep `scores.db`. It is removed when the run stops.
+ */
+const storedIn = (sid) => '/pyctures-stored/' + sid
+const putIn = (dir, stored) => (stored || []).map((f) => ({ path: dir + '/' + f.path, data: f.data }))
+
+/** Does the scene open a database? Python's sqlite3 is a download of its own in Pyodide, fetched only for a scene that says open_database. */
+export function usesDatabase(source) { return /\bopen_database\b/.test(codeOf(source || '')) }
 
 /** The files a scene opens, as [{path, data}], from a single-file page or beside the scene. */
 async function readFiles(src, files) {
@@ -588,12 +1015,13 @@ function workerMain() {
       if (m.op === 'start') {
         writeFiles(m.files)
         await py.loadPackagesFromImports(m.source)
+        if (m.sqlite) await py.loadPackage('sqlite3')
         py.globals.get('_pyctures_new')(m.sid)
         reply = call(m.sid, 'start', m.source, m.info)
       } else if (m.op === 'tick') {
         reply = call(m.sid, 'tick', m.payload)
       } else {
-        reply = call(m.sid, 'stop')
+        reply = call(m.sid, 'stop', m.dir)
       }
     } catch (e) {
       error = String((e && e.message) || e)
@@ -661,21 +1089,23 @@ let nextSceneId = 1
 
 /**
  * Python in a Web Worker, with Pyodide: what built pages and scenes on a web
- * page use. `files`: extra files to put beside the scene.
+ * page use. `files`: extra files to put beside the scene. `stored` (to start): the files
+ * the scene has written before, as [{path, data}], put there after them.
  */
 export function workerTransport(src, files = []) {
   const sid = nextSceneId++
   let worker = null
   return {
     label: 'Python in a worker',
-    async start(source, info) {
+    keepsFiles: true,   // Python's files are forgotten with the page: the page hands them over and keeps what is written
+    async start(source, info, stored) {
       worker = pythonWorker()
-      const data = await readFiles(src, files)
-      return worker.call({ op: 'start', sid, source, info: JSON.stringify(info), files: data }, data.map((d) => d.data))
+      const data = (await readFiles(src, files)).concat(putIn(storedIn(sid), stored))
+      return worker.call({ op: 'start', sid, source, info: JSON.stringify({ ...info, files_in: storedIn(sid) }), files: data, sqlite: usesDatabase(source) }, data.map((d) => d.data))
     },
     tick(payload) { return worker.call({ op: 'tick', sid, payload: JSON.stringify(payload) }) },
     async stop() {
-      if (worker && !worker.dead) { try { await worker.call({ op: 'stop', sid }) } catch (e) { /* not running */ } }
+      if (worker && !worker.dead) { try { await worker.call({ op: 'stop', sid, dir: storedIn(sid) }) } catch (e) { /* not running */ } }
     },
     /** Stop a scene that is stuck in a loop: ends the worker, and Python with it. */
     hardStop() { if (worker) worker.terminate('Python was restarted') },
@@ -708,10 +1138,11 @@ export function pyodideTransport(src, files = []) {
   let py = null, callPy = null
   return {
     label: 'Python in the page',
-    async start(source, info) {
+    keepsFiles: true,
+    async start(source, info, stored) {
       py = await loadPyodideOnce()
       callPy = py.globals.get('_pyctures_call')
-      for (const f of await readFiles(src, files)) {
+      for (const f of (await readFiles(src, files)).concat(putIn(storedIn(sid), stored))) {
         const parts = f.path.split('/')
         for (let i = 1; i < parts.length; i++) {
           try { py.FS.mkdir(parts.slice(0, i).join('/')) } catch (e) { /* exists */ }
@@ -719,11 +1150,12 @@ export function pyodideTransport(src, files = []) {
         py.FS.writeFile(f.path, new Uint8Array(f.data))
       }
       await py.loadPackagesFromImports(source)
+      if (usesDatabase(source)) await py.loadPackage('sqlite3')
       py.globals.get('_pyctures_new')(sid)
-      return callPy(sid, 'start', source, JSON.stringify(info))
+      return callPy(sid, 'start', source, JSON.stringify({ ...info, files_in: storedIn(sid) }))
     },
     async tick(payload) { return callPy(sid, 'tick', JSON.stringify(payload)) },
-    async stop() { if (callPy) { try { callPy(sid, 'stop') } catch (e) { /* not running */ } } },
+    async stop() { if (callPy) { try { callPy(sid, 'stop', storedIn(sid)) } catch (e) { /* not running */ } } },
   }
 }
 
@@ -771,6 +1203,7 @@ let activeScene = null
  *   background  the colour behind the canvas
  *   autoStart   false: wait for scene.start()
  *   makeTransport  a function that makes a fresh transport for each run
+ *   storage     where the scene's files and databases are kept, from a host (see sceneFiles)
  */
 export class Scene {
   constructor(el, options) {
@@ -787,6 +1220,14 @@ export class Scene {
       measuring: false, measureSince: 0, lastShown: 0,
       acc: { frames: 0, shown: 0, missed: 0, worst: 0, cmds: 0, ms: {} },
     }
+    // What this scene's saved values are kept under: its own address, so each scene on a site has its own.
+    // A scene that came with the page (one file holding everything) is told apart by the page's address.
+    const src = this.opt.src || this.name
+    const packed = inline()
+    const kept = !/^(?:https?|file):$/.test(location.protocol) ? this.name
+      : packed && packed.sources && packed.sources[src] != null ? `${location.pathname}#${src}` : new URL(src, document.baseURI).pathname
+    this.saved = savedValues(kept)
+    this.files = sceneFiles(kept, this.opt.storage)
     this.visible = false
     el.classList.add('pyctures-scene')
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative'
@@ -902,6 +1343,8 @@ export class Scene {
       if (/\bTHREE\b|\baddons\b/.test(source)) {
         try { three = await loadThree() } catch (e) { this.log('err', `3D could not load: ${(e && e.message) || e}`) }
       }
+      // Everything the scene has stored, to put in Python's file system before it starts.
+      const stored = this.transport.keepsFiles ? await this.files.all() : []
       if (token !== r.token) return
       // A fresh canvas for every run: an empty handle table, and no context
       // left over from the last run (a canvas keeps whichever it made first).
@@ -916,6 +1359,9 @@ export class Scene {
         three: three && three.three,
         addons: three && three.addons,
         images: imageResolver(this.opt.src, inl && inl.files),
+        saved: this.saved,
+        files: this.files,
+        input: inputOf(source),
         hooks: {
           onEvent: (e) => { if (r.live) r.events.push(e) },
           onSize: (s) => { r.size = s },
@@ -931,7 +1377,7 @@ export class Scene {
       r.busy = true
       r.busySince = performance.now()
       this.setStatus('running')
-      const text = await this.transport.start(source, { ...r.size, measure: r.measuring })
+      const text = await this.transport.start(source, { ...r.size, measure: r.measuring, saved: this.saved.all() }, stored)
       r.busy = false
       if (r.warnedStuck) this.unstuck()
       if (token !== r.token) return
@@ -1229,6 +1675,8 @@ function serverMode() {
  *   data-pyctures-fullpage    the scene is the whole page
  *   data-pyctures-measure     show the measure box (frame rate and timings)
  *   data-pyctures-worker      "off" runs Python on the page's own thread
+ * `options.storage` (from a host, not an attribute): where the scene's files and databases
+ * are kept, an object with any of list, readText, writeText, readBytes, writeBytes (see sceneFiles).
  */
 export function mount(el, options = {}) {
   if (el.pycturesScene) return el.pycturesScene
@@ -1245,6 +1693,7 @@ export function mount(el, options = {}) {
     background: options.background || el.dataset.pycturesBackground || '#0b0b0f',
     autoStart: options.autoStart !== false,
     makeTransport: make,
+    storage: options.storage,
   })
   return scene
 }

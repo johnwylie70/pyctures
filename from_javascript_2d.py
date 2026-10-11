@@ -1,10 +1,10 @@
-# Brought across from JavaScript: a spinning square, a circle, and a click
-# handler, written the way a JavaScript canvas example writes them.
-# Shows: the few changes that turn a JavaScript canvas example into Python.
-# See docs/from-javascript.md for the JavaScript it came from.
+# From JavaScript, 2D: a canvas example brought across from JavaScript (docs/from-javascript.md shows the original). A square spins, and a click moves the circle.
+# Use: click or tap.
+# Try changing: 0.02, how fast the square turns; "Click me", the words.
 #
 # Run it:   pyctures run from_javascript_2d.py
 # Share it: pyctures build from_javascript_2d.py -o site/
+
 import math
 
 angle = 0

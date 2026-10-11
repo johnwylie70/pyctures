@@ -1,4 +1,8 @@
-# Spiral Garden: 200 dots placed on the golden angle, turning slowly.
+# Spiral Garden: 200 coloured dots on a spiral, turning slowly and leaving trails.
+# Try changing: 200, how many dots; 2.39996, the angle between one dot and the next (try 2.4, or 2); 0.2, how fast the trails fade.
+#
+# Run it:   pyctures run spiral_garden.py
+
 import math
 
 t = 0

@@ -1,8 +1,6 @@
-# Typing: type on the keyboard and your words appear, centred, with a box
-# drawn to fit them.
-# Shows: on_key_down and keys for keyboard input, and `await` to read a value
-# back from the browser (how wide some text is), inside an async draw().
-# Click the page first if the keyboard does not reach it.
+# Typing: what you type appears in the middle, in a box drawn to fit the words.
+# Use: click the picture, then type. Backspace rubs out.
+# Try changing: "Type something", the words it starts with; 44px, the size of the letters.
 #
 # Run it:   pyctures run type_and_measure.py
 # Share it: pyctures build type_and_measure.py -o site/

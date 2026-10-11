@@ -1,4 +1,9 @@
-# Starfield: fly through 300 stars. Hold the mouse down (or a finger) to go faster.
+# Starfield: you fly through 300 stars.
+# Use: hold the mouse button or a finger down to go faster.
+# Try changing: 300, how many stars; 1.2 and 0.35, the fast and slow speeds.
+#
+# Run it:   pyctures run starfield.py
+
 import random
 
 def new_star(z=None):

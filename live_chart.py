@@ -1,6 +1,6 @@
-# A live chart: a line chart of a made-up sensor, updating as you watch.
-# Shows: turning data into screen positions, gridlines, labels, a gradient fill,
-# and a readout that follows the mouse.
+# Live Chart: a line chart of a made-up temperature, drawing itself as new readings arrive.
+# Use: move the mouse over it to read a value.
+# Try changing: 200, how many readings it keeps; low and high, the range the chart shows; 0.8, how fast the temperature swings.
 #
 # Run it:   pyctures run live_chart.py
 # Share it: pyctures build live_chart.py -o site/

@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Space Rocks · Pyctures</title>
+<meta name="description" content="Steer a ship and shoot the rocks, which break in two. Written in Python with Pyctures, running live in your browser.">
+<meta property="og:title" content="Space Rocks · Pyctures">
+<meta property="og:description" content="Steer a ship and shoot the rocks, which break in two. Written in Python with Pyctures, running live in your browser.">
+<meta property="og:image" content="https://johnwylie70.github.io/pyctures/thumbs/solar_system.jpg">
+<style>
+:root { --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --dim: #9198a1; --accent: #3fb950; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, sans-serif; }
+a { color: var(--accent); }
+header, main, footer { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 40px; }
+h1 { font-size: clamp(32px, 6vw, 52px); line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
+h1 small { display: block; font-size: 0.45em; color: var(--dim); font-weight: 500; letter-spacing: 0; margin-top: 8px; }
+.lead { font-size: 18px; color: var(--dim); max-width: 720px; margin: 0 0 24px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 40px; }
+.install { font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel); border: 1px solid var(--line);
+           border-radius: 8px; padding: 10px 14px; display: inline-flex; gap: 12px; align-items: center; }
+.install button { background: none; border: 1px solid var(--line); color: var(--dim); border-radius: 6px; padding: 2px 8px; cursor: pointer; font: inherit; font-size: 13px; }
+.btn { display: inline-block; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); color: var(--text);
+       text-decoration: none; background: var(--panel); font-weight: 600; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #04260f; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; text-decoration: none; color: var(--text);
+        transition: transform .15s, border-color .15s; }
+.card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.card img, .card .noimg { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #000; }
+.card div { padding: 12px 14px 14px; }
+.card h3 { margin: 0 0 4px; font-size: 17px; }
+.card p { margin: 0; color: var(--dim); font-size: 14px; }
+.tag { font-size: 12px; color: var(--dim); border: 1px solid var(--line); border-radius: 99px; padding: 0 8px; margin-left: 6px; font-weight: 500; vertical-align: 2px; }
+footer { color: var(--dim); font-size: 14px; padding-top: 48px; padding-bottom: 48px; }
+.scene { width: 100%; aspect-ratio: 16 / 9; max-height: 75vh; border-radius: 12px; overflow: hidden; background: #000; border: 1px solid var(--line); }
+.crumbs { padding-top: 24px; font-size: 14px; }
+.scene-head h1 { font-size: clamp(26px, 5vw, 38px); margin: 8px 0 4px; }
+.scene-head p { margin: 0 0 16px; color: var(--dim); }
+.cols { display: grid; grid-template-columns: 1fr; gap: 24px; margin-top: 24px; }
+@media (min-width: 900px) { .cols { grid-template-columns: 2fr 1fr; } }
+pre { margin: 0; background: var(--panel) !important; border: 1px solid var(--line); border-radius: 12px; padding: 16px !important;
+      overflow-x: auto; font-size: 14px; line-height: 1.5; }
+.cols > div { min-width: 0; }
+pre code.hljs { padding: 0; background: none; }
+.side h2 { font-size: 16px; margin: 0 0 8px; }
+.side pre { font-size: 13px; padding: 10px 12px !important; margin-bottom: 16px; }
+.side p { color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+<div class="crumbs"><a href="index.html">← All scenes</a></div>
+<div class="scene-head"><h1>Space Rocks</h1><p>Steer a ship and shoot the rocks, which break in two. Left and right turn, up flies, space shoots. Or hold to fly to your finger, and tap to shoot.</p></div>
+<div class="scene" data-pyctures-src="space_rocks.py"></div>
+<div class="cols"><div><pre><code class="language-python"># Space Rocks: steer a ship, shoot the rocks, and do not get hit. A rock breaks in two when it is shot.
+# Use: left and right turn, up fires the engine, space shoots. Or tap to shoot, and hold to fly towards your finger.
+# Try changing: 3, the rocks in a wave; 500, the speed of a bullet; 7, the sides of a rock.
+#
+# Run it:   pyctures run space_rocks.py
+
+# A sprite&#x27;s picture is drawn round 0, 0, facing right.
+def draw_ship(size):
+    triangle(size / 2, 0, -size / 2, -size / 3, -size / 2, size / 3, outline=&quot;white&quot;, thickness=2)
+
+def draw_rock(size):
+    polygon(0, 0, size / 2, 7, outline=&quot;white&quot;, thickness=2)
+
+ship = Sprite(draw_ship, 0, 0, size=30)
+rocks = []
+bullets = []
+score = 0
+lives = 3
+safe = 0                        # seconds in which nothing can hurt the ship
+held = 0                        # seconds the mouse or a finger has been down
+
+def add_rock(x, y, size):
+    rock = Sprite(draw_rock, x, y, size=size)
+    rock.vx = random(-70, 70)
+    rock.vy = random(-70, 70)
+    rock.spin = degrees(random(-60, 60))
+    rocks.append(rock)
+
+def new_ship():
+    global safe
+    ship.x = width / 2
+    ship.y = height / 2
+    ship.vx = 0
+    ship.vy = 0
+    ship.angle = degrees(-90)   # pointing up: 0 faces right
+    safe = 2
+
+def new_game():
+    global score, lives
+    score = 0
+    lives = 3
+    rocks.clear()
+    bullets.clear()
+    new_ship()
+
+def shoot():
+    bullet = Sprite.circle(ship.x, ship.y, 5)
+    bullet.angle = ship.angle
+    bullet.push(500)            # off it goes, the way the ship faces
+    bullets.append(bullet)
+
+def on_mouse_down(x, y):
+    global held
+    held = 0
+    if lives == 0:
+        new_game()
+    else:
+        ship.angle = ship.angle_to(x, y)
+        shoot()
+
+def steer(dt):
+    global held
+    ship.spin = 0
+    if &quot;ArrowLeft&quot; in keys: ship.spin = degrees(-230)
+    if &quot;ArrowRight&quot; in keys: ship.spin = degrees(230)
+    if &quot;ArrowUp&quot; in keys: ship.push(300 * dt)
+    if &quot; &quot; in pressed: shoot()
+    # A tap is over before the engine starts. Keep holding and the ship flies to your finger.
+    if mouse.down:
+        held += dt
+        ship.angle = ship.angle_to(mouse)
+        if held &gt; 0.18: ship.push(300 * dt)
+    ship.limit(350)
+
+def update(dt):
+    global score, lives, safe
+    if lives == 0:
+        if &quot; &quot; in pressed:
+            new_game()
+        return
+    if not rocks:               # a new wave, starting on the left edge
+        for i in range(3):
+            add_rock(0, random(height), 80)
+        safe = 2
+    safe -= dt
+    steer(dt)
+    ship.update(dt)
+    ship.wrap()
+    for rock in rocks:
+        rock.update(dt)
+        rock.wrap()
+    # Loop over a copy of the list (bullets[:]), because the loop removes bullets from it.
+    for bullet in bullets[:]:
+        bullet.update(dt)
+        rock = bullet.hit(rocks)
+        if rock:
+            remove(bullets, bullet)
+            remove(rocks, rock)
+            score += 10
+            if rock.size &gt; 20:  # a big rock breaks in two
+                add_rock(rock.x, rock.y, rock.size / 2)
+                add_rock(rock.x, rock.y, rock.size / 2)
+        elif bullet.offscreen():
+            remove(bullets, bullet)
+    if safe &lt;= 0 and ship.hit(rocks):
+        lives -= 1
+        new_ship()
+
+def draw():
+    background(&quot;black&quot;)
+    for rock in rocks:
+        rock.draw()
+    for bullet in bullets:
+        bullet.draw()
+    ship.visible = lives &gt; 0 and (safe &lt;= 0 or safe % 0.25 &gt; 0.12)   # it blinks while it is safe
+    ship.draw()
+    text(f&quot;Score {score}   Lives {lives}&quot;, 12, 30, &quot;white&quot;, 20, &quot;left&quot;)
+    if lives == 0:
+        text(&quot;Game over&quot;, width / 2, height / 2, &quot;white&quot;, 32, &quot;centre&quot;)
+        text(&quot;Tap or press space to play again&quot;, width / 2, height / 2 + 40, &quot;white&quot;, 18, &quot;centre&quot;)
+
+new_game()
+</code></pre></div>
+<div class="side"><h2>Run it yourself</h2>
+<pre>pip install pyctures
+pyctures run space_rocks.py</pre>
+<h2>Put it on your website</h2>
+<pre>pyctures build space_rocks.py -o site/</pre>
+<p>Python runs in the visitor's browser, so any static host works. <a href="https://github.com/johnwylie70/pyctures/blob/main/docs/website.md">How</a> · <a href="https://github.com/johnwylie70/pyctures/blob/main/examples/space_rocks.py">This file on GitHub</a></p>
+</div></div>
+</main>
+<footer>Pyctures 0.2.0 · MIT licence · <a href="https://github.com/johnwylie70/pyctures">GitHub</a> · <a href="https://pypi.org/project/pyctures/">PyPI</a> · <a href="https://www.npmjs.com/package/pyctures">npm</a><br>Pyctures is also built into <a href="https://www.circuitry.dev">Circuitry Studio</a>, where these scenes run in a code editor with a live preview beside the code.</footer>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+<script>hljs.highlightAll()</script>
+<script type="module" src="pyctures/pyctures.js"></script>
+</body>
+</html>

@@ -55,7 +55,12 @@ pre code.hljs { padding: 0; background: none; }
 <div class="crumbs"><a href="index.html">← All scenes</a></div>
 <div class="scene-head"><h1>Torus Knot</h1><p>One shape, lit, turning. Drag to look around it.</p></div>
 <div class="scene" data-pyctures-src="torus_knot.py"></div>
-<div class="cols"><div><pre><code class="language-python"># Torus Knot: one shape, lit, turning. Drag to look around it.
+<div class="cols"><div><pre><code class="language-python"># Torus Knot: one knotted shape, lit and turning.
+# Use: drag to look around it.
+# Try changing: 3, 5, how the knot winds (try 2, 3); 0.004, how fast it turns.
+#
+# Run it:   pyctures run torus_knot.py
+
 renderer = THREE.WebGLRenderer(canvas=canvas, antialias=True)
 renderer.setPixelRatio(pixel_ratio)
 renderer.setSize(width, height, False)
@@ -81,7 +86,7 @@ pyctures run torus_knot.py</pre>
 <p>Python runs in the visitor's browser, so any static host works. <a href="https://github.com/johnwylie70/pyctures/blob/main/docs/website.md">How</a> · <a href="https://github.com/johnwylie70/pyctures/blob/main/examples/torus_knot.py">This file on GitHub</a></p>
 </div></div>
 </main>
-<footer>Pyctures 0.1.0 · MIT licence · <a href="https://github.com/johnwylie70/pyctures">GitHub</a> · <a href="https://pypi.org/project/pyctures/">PyPI</a> · <a href="https://www.npmjs.com/package/pyctures">npm</a><br>Pyctures is also built into <a href="https://www.circuitry.dev">Circuitry Studio</a>, where these scenes run in a code editor with a live preview beside the code.</footer>
+<footer>Pyctures 0.2.0 · MIT licence · <a href="https://github.com/johnwylie70/pyctures">GitHub</a> · <a href="https://pypi.org/project/pyctures/">PyPI</a> · <a href="https://www.npmjs.com/package/pyctures">npm</a><br>Pyctures is also built into <a href="https://www.circuitry.dev">Circuitry Studio</a>, where these scenes run in a code editor with a live preview beside the code.</footer>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>

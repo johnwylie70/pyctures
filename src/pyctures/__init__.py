@@ -64,6 +64,7 @@ H_SAVED = 8  # the page's keeper of saved values
 H_FILES = 9  # the page's keeper of files and databases
 H_SOUND = 10     # the page's sound: `from synths import *` sends it a frame's sounds as one command, send(batch)
 H_DIALS = 11     # the page's dials, sliders and piano keys: `from pydials import *` makes each with one command
+H_NOTATION = 15  # the page's sheet music: `from pynotation import *`
 
 
 

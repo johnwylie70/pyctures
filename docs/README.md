@@ -20,6 +20,7 @@ These pages are adapted from the Pyctures help in [Circuitry Studio](https://www
 - [Files and databases](files-and-databases.md): write a text or JSON file, and keep rows in a SQLite database
 - [Sound and music](sound.md): game sounds, notes, tunes and synths
 - [Dials and a keyboard](dials.md): dials, sliders, buttons and a piano keyboard on the scene
+- [Sheet music](sheet-music.md): a tune or a song written as notes on a staff, lit as it plays, and played along with
 - [Bringing a JavaScript example across](from-javascript.md)
 - [Use it on your website](website.md)
 

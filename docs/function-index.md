@@ -16,6 +16,7 @@ Every name a Pyctures program can use, by area, one line each. The link on each 
 | Databases (SQLite) | yes | yes |
 | Sound and music | with synths.js | yes, `from synths import *` |
 | Dials and a keyboard | with dials.js | yes, `from pydials import *` |
+| Sheet music | with notation.js | yes, `from pynotation import *` |
 | Image processing | Circuitry only | Circuitry only |
 
 This page is Pyctures's own index, in its own spellings. pictures.js has the same areas in JavaScript: [the pictures.js function index](https://www.circuitry.dev/docs/pictures/functions).
@@ -674,6 +675,25 @@ These come with `from pydials import *` at the top of the scene. Explained in [D
 | `page(name)` | A page of controls with a tab |
 | `layout(...)`, `theme(...)` | Where the plates go, how big, whether they wrap, a panel of a set size; the colours |
 | `room()` | The rectangle no control is on |
+
+
+## Sheet music
+
+These come with `from pynotation import *` at the top of the scene, which brings the sound too. Explained in [Sheet music](sheet-music.md).
+
+| Name | What it does |
+|---|---|
+| `show_notes(music, step, ...)` | Writes music out as notes on a staff and gives back its page. `music` is a tune as `play_notes` takes it, a list, a sheet, a song file or dictionary, or a list of `{"note", "start", "length"}` |
+| `make_sheet(key=, time=, tempo=, title=, clef=)` | A sheet to write a note at a time: `sheet.add("G4", "quarter")`, `sheet.add(["B4", "D5"], "half")`, `sheet.rest("quarter")`, `sheet.clear()` |
+| `page.play(start=0, tempo=None)`, `page.stop()`, `page.playing` | Plays the music and lights each note as it sounds |
+| `page.follow(song)` | Follows a song from `play_song`, or a function that gives beats |
+| `page.on_note`, `page.on_bar`, `page.on_tap`, `page.on_done` | Yours to set: called as a note or a bar begins, when a note or a bar is tapped, and when the music ends |
+| `page.beat`, `page.bar`, `page.sounding` | Where the music has got to, and the notes sounding, as the page last said |
+| `page.play_along(mode, synth=, staff=, tempo=, hint=, any_octave=, count_in=)` | The learner plays: `"wait"` waits at each note, `"time"` keeps time |
+| `page.note_on(note)`, `page.note_off(note)` | A key went down, or up. `keyboard(page)` does this for you, in the page |
+| `page.result`, `page.on_right`, `page.on_wrong` | How playing along is going: `right`, `wrong`, `missed`, `total`, `percent`, `timing`, `done` |
+| `page.seek(bar)`, `page.show(music)`, `page.place(at)`, `page.zoom`, `page.remove()` | Go to a bar; other music; its place and size; take it away |
+| `theme(now="deepskyblue")` | The colours of every page: `paper`, `ink`, `line`, `now`, `right`, `wrong`, `cursor` |
 
 ## Other names
 

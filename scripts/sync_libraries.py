@@ -33,6 +33,10 @@ COPIES = {
     ("dials.js", "dials.js"): WEB / "dials" / "dials.js",
     ("dials.js", "LICENSE"): WEB / "dials" / "LICENSE",
     ("pydials", "src/pydials/__init__.py"): WEB / "dials" / "pydials.py",
+    ("notation.js", "notation.js"): WEB / "notation" / "notation.js",
+    ("notation.js", "LICENSE"): WEB / "notation" / "LICENSE",
+    ("notation.js", "LICENSE-GLYPHS"): WEB / "notation" / "LICENSE-GLYPHS",
+    ("pynotation", "src/pynotation/__init__.py"): WEB / "notation" / "pynotation.py",
 }
 
 

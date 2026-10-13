@@ -63,6 +63,10 @@ def test_the_frame_s_seconds_are_kept_for_a_library_and_only_for_a_frame():
 def test_what_a_file_draws_as_it_starts_has_the_effects_on_it():
     """The start's own picture is a frame given no time: the last command sent with it runs the effects (frame(0)),
     so the first picture of a run, and of a film of it, is not a bare one."""
+    import sys
+    from conftest import ROOT
+    # (As `pyctures run` does for a scene: the copy Pyctures carries is on the path, looked for last.)
+    sys.path.append(str(ROOT / "src" / "pyctures" / "web" / "visualfx"))
     info = json.dumps({"width": 400, "height": 300, "pixel_ratio": 1})
     reply = json.loads(pyctures.start("from pyvisualfx import *\ninvert()\n\ndef draw():\n    background('red')\n", info))
     to_effects = [[c[4]] + c[5] for c in reply["cmds"] if c[0] == "call" and c[3] == pyctures.H_EFFECTS]

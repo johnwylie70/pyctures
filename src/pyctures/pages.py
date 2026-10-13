@@ -31,6 +31,8 @@ ASSETS = {
     # Scenes (`class Title(Scene)`): Pyctures' own, loaded only for a file that names a scene.
     "scenes/scenes.js": WEB / "scenes" / "scenes.js",
     "scenes/pyscenes.py": WEB / "scenes" / "pyscenes.py",
+    # A scene run one frame at a time for a recorder: loaded only by mount(el, { stepped }).
+    "stepped/stepped.js": WEB / "stepped" / "stepped.js",
 }
 
 # The libraries a scene asks for by importing them: the name it imports -> (its folder, the page's half,

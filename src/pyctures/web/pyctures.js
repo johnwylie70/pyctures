@@ -812,8 +812,8 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   size()
 
   return {
-    /** Queue one frame's commands; drawn on the next refresh. */
-    push(cmds, at) {
+    /** Queue one frame's commands; drawn on the next refresh, or with `now` at once. */
+    push(cmds, at, now) {
       // A frame's sounds are heard now, not when the frame is drawn: they are timed, and waiting for a refresh
       // (or two, in the queue) would use up the moment the player has to place them exactly.
       if (sound && cmds) {
@@ -825,6 +825,7 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
       // Not a file's own text: that is the scene's to keep as it wrote it.
       if (images && cmds) swapStrings(cmds.some((c) => c[0] === 'call' && c[3] === 9) ? cmds.filter((c) => !(c[0] === 'call' && c[3] === 9)) : cmds, images)
       pending.push({ cmds: cmds || [], at, recv: at ? abs() : 0 })
+      if (now) return present()
       if (!scheduled) { scheduled = true; requestAnimationFrame(present) }
     },
     get size() { return { width: cssW, height: cssH, pixel_ratio: dpr } },
@@ -988,7 +989,7 @@ const NO_READING = { samples: [], level: [0, 0], notes: [] }
  */
 function soundKeeper({ host = null, src = '', module = null, onState = null, midi = undefined, microphone = undefined, save = undefined, files = null }) {
   host = host || {}
-  const clock = () => performance.now() / 1000
+  const clock = host.clock || (() => performance.now() / 1000)
   const elsewhere = typeof host.send === 'function'
   const scope = 'scene' + ++soundScopes
   const hear = (now) => { state = now; if (onState) onState(now); if (host.onState) host.onState(now) }
@@ -1070,6 +1071,8 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   }
 
   function makePlayer() {
+    // A player of the host's own making, on the host's clock (stepped/stepped.js: a recorder's).
+    if (host.player) { player = host.player(mod); joinMidi(player); joinSound(player); return }
     if (!pagePlayer || pagePlayer.player.state === 'closed' || pagePlayer.player.state === 'failed') {
       // The first scene to make a sound makes the player, with what its host gave it.
       const inl = inline()
@@ -1434,7 +1437,7 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       if (player && pagePlayer && pagePlayer.player === player) {
         pagePlayer.heard.delete(hear)
         if (--pagePlayer.users <= 0) { player.close(); pagePlayer = null }
-      }
+      } else if (player && host.player) player.close()
     },
   }
 }
@@ -2429,7 +2432,7 @@ export function mount(el, options = {}) {
     fullPage: options.fullPage !== undefined ? options.fullPage : el.hasAttribute('data-pyctures-fullpage'),
     output: options.output || el.dataset.pycturesOutput || 'console',
     background: options.background || el.dataset.pycturesBackground || '#0b0b0f',
-    autoStart: options.autoStart !== false,
+    autoStart: options.autoStart !== false && !options.stepped,
     makeTransport: make,
     storage: options.storage,
     sound: options.sound,
@@ -2438,6 +2441,8 @@ export function mount(el, options = {}) {
     save: options.save,
     dials: options.dials,
   })
+  // For a host that records the scene a frame at a time: `await scene.ready`, then `await scene.step()` for each frame.
+  if (options.stepped) scene.ready = import(new URL('stepped/stepped.js', BASE)).then((m) => m.stepped(scene, options.stepped))
   return scene
 }
 

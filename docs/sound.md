@@ -601,6 +601,14 @@ def draw():
 
 `sound_output()` has the same three for everything that is sounding, the microphone has them for your voice, and a song has them a channel at a time (`song.channel(3).level()`). They are **a frame late**: Python cannot ask the page and be answered, so the first call asks the page to start saying, and from the next frame on each call gives what the page said with that frame. The very first call gives an empty list, zeros and no notes. The page stops saying a second and a half after your scene stops asking.
 
+## Recording a video with sound
+
+**In Circuitry**, press the video button under the scene, choose a size and 30 or 60 frames a second, and press Record. The scene starts again from its beginning and is recorded until you press Stop. You get one `.mp4` file with the pictures and the sound in it, saved beside the scene (or to Photos or a folder you choose, on an iPad).
+
+The sound in the video is exactly in step with the pictures, however slowly the frames were made. A recorder gives a scene one frame at a time, and a frame may take much longer to make and encode than the sixtieth of a second it stands for. So while a scene is recorded its sound is not played by the sound card: it is worked out for one frame at a time, on the same clock as the pictures, and you hear nothing until you play the video. Your scene does not change. `sound_time()`, `beat()` and `sleep()` go by the video's time, not the computer's; a note you play in a frame starts on that frame's first sample; `after=`, `at=` and `beat=` mean what they always did; and recording the same scene twice gives the same sound. What a scene reads back (`lead.samples()`, a song's position) is a frame late, as it is when it is not recorded. There is no microphone in a recording.
+
+**On a page of your own** a scene can be run a frame at a time, by whoever is making the film: `mount(el, { src, stepped: { fps: 60 } })`, then `await scene.step()` for each frame after the first, and `scene.sound.take()` for the samples. [Putting scenes on a website](website.md) has the details.
+
 ## Mistakes
 
 A mistake is said in plain words on the line that made it, with what was probably meant:

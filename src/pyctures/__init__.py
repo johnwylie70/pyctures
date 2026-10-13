@@ -91,6 +91,7 @@ class _State:
         self.files_dir = ""      # where the page put this scene's stored files (a browser); "" is the scene's folder
         self.databases = []      # every database that is open
         self.ending = []         # functions called as a frame is sent (a library that sends once a frame, as synths does)
+        self.vt = None           # the scene's time while a recorder steps it (each frame says it), else None
         self.scenes = None       # what the library pyscenes keeps for this run, for a file that names a scene
         self.stage = None        # its director, once the file has defined a scene: each frame tests this and no more
 
@@ -174,12 +175,16 @@ class _Read:
         return result
 
 
+def _clock():
+    return time.monotonic() if S.vt is None else S.vt
+
+
 class _Frame:
     """'await frame()' — park until the next frame (also sends this one)."""
     __slots__ = ("until",)
 
     def __init__(self, seconds=0.0):
-        self.until = time.monotonic() + seconds
+        self.until = _clock() + seconds
 
     def __await__(self):
         yield self
@@ -1742,7 +1747,7 @@ def _apply_events(p):
 
 
 def _step_tasks(answers):
-    now = time.monotonic()
+    now = _clock()
     alive = []
     for task in S.tasks:
         waiting = task[1]
@@ -1839,6 +1844,7 @@ def start(source, info_json):
     S.busy = True
     S.started = time.monotonic()
     info = json.loads(info_json)
+    S.vt = info.get("vt")
     S.measuring = bool(info.get("measure"))
     saved = info.get("saved")
     if isinstance(saved, dict):
@@ -1901,6 +1907,7 @@ def tick(payload_json):
     S.busy = True
     p = json.loads(payload_json)
     S.frame_no += 1
+    S.vt = p.get("vt", S.vt)
     S.measuring = bool(p.get("measure"))
     t_tick = time.perf_counter() if S.measuring else 0.0
     old_out, old_err = sys.stdout, sys.stderr

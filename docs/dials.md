@@ -58,6 +58,7 @@ All of them take `x=` and `y=` (to place it by hand: its top left corner), `colo
 | `meter(source)` | A level from 0 to 1 as a bar of lights |
 | `label(text)` | Words. Made just before some controls, it is their heading, on the plate they share |
 | `group`, `row`, `column`, `grid`, `page`, `spacer`, `wrap` | What goes with what: see [Laying it out](#laying-it-out) |
+| `number`, `text_box`, `readout`, `checkbox`, `choose`, `radio`, `dropdown`, `xy_pad`, `colour_picker`, `progress`, `light`, `busy`, `range_slider`, `fader`, `joystick`, `dpad`, `action_button`, `envelope`, `step_grid`, `pads`, `pitch_wheel`, `mod_wheel`, `steps`, `gate_pattern`, `arp_pattern`, `drum_seq` | More controls, for any program, for games and for music: see [More controls](#more-controls) |
 | `layout(at="bottom")` | Where the plates go (`"top"`, `"bottom"`, `"left"`, `"right"`), and `scale=`, `wrap=`, `fit=`, `min_scale=`, `max_scale=`, `columns=`, `size=`, `compact=`, `dividers=`, `plates=`, `align=`, `backdrop=`, `image=` and `on_resize=`. `layout()` gives back the width, height and scale the page last said |
 | `room()` | The rectangle no control is on (`x`, `y`, `width`, `height`), for the scene to draw in. The page says it with a frame, so it is a frame late |
 | `theme(accent="deepskyblue")` | The colours |
@@ -308,6 +309,233 @@ def draw():
     background("midnightblue")
     area = room()                         # the rectangle the controls leave
     circle(area.x + area.width / 2, area.y + area.height / 2, 10 + 200 * max(lead.level()), "gold")
+```
+
+## More controls
+
+These are made and laid out like the ones above, are numbers or words in your code in the same way, and take the same options. The page draws them and feels the fingers, typing included; Python has what changed with the next frame.
+
+### For any program
+
+![A number box with a minus and a plus, a text box holding a name, and three readouts: a score, a clock and a speed](images/dials-number-text-readout.png)
+
+```py
+lives = number("lives", 0, 9, 3)            # − and +, or tap the number and type
+name = text_box("name", "Ada")              # tap it and type
+score = 0
+readout("score", lambda: score, size="large")
+
+def draw():
+    background("midnightblue")
+    text(f"{name} has {lives} lives", 20, 120, "white", 20)
+```
+
+| | |
+|---|---|
+| `number(label, min, max, start)` | A number box. Tap − or + to step, hold one to keep stepping (faster and faster), drag up or down on the number, or tap the number and type it. It counts in ones (in tenths over a small range) unless `step` says otherwise. `number(label, target, "setting")` ties it to a setting. `stepper` is the same. |
+| `text_box(label, text)` | One line of text. Tap it and type: Enter keeps what you typed, Escape puts back what was there. `name.value` is the text. Options: `placeholder`, `max` (letters), `width`, `on_change(text)` (as each letter is typed; Python hears it a frame later), `on_enter(text)`. `text_box(label, target, "setting")` ties it to a setting. |
+| `readout(label, lambda: value)` | Shows a value or a message, and takes no hand. Give it a function (asked every frame), a target and a setting, or nothing: then `score.value = 12` says what it shows. Options: `unit`, `digits`, `size=` (`"large"` for a score), `format="clock"` (65 is 1:05) or a function that makes the words. |
+
+![Two checkboxes, three choices side by side with the middle one lit, three one under another, and a dropdown with its list of planets open](images/dials-checkbox-choose-dropdown.png)
+
+```py
+sound = checkbox("sound", True)                             # if sound: …
+mode = choose("mode", ["easy", "medium", "hard"])           # mode.value, mode.index
+planet = dropdown("planet", ["Mercury", "Venus", "Earth", "Mars", "Jupiter", "Saturn"], "Earth")
+```
+
+| | |
+|---|---|
+| `checkbox(label, on)` | A box that is ticked, with its label beside it. `sound.on` is True or False, as a toggle's is. `checkbox(label, target, "setting")` ties it to a setting. |
+| `choose(label, choices, start)` | One of a few, all in sight side by side: tap one, or slide a finger across them. `mode.value` is the choice and `mode.index` its place. Where they do not fit on one line they take two. `choose(label, target, "setting")` takes the choices from the target. |
+| `radio(label, choices, start)` | The same, one under another with a round mark each. |
+| `dropdown(label, choices, start)` | One of a long list. A tap opens the whole list over the controls; a long one is moved with a finger or the wheel; it closes on a pick or a touch outside it. |
+
+![An XY pad with its dot and the two numbers under it, a colour patch, a light that is on, a busy ring, a progress bar at 40%, a slider with two handles, and three faders](images/dials-pad-colour-progress-fader.png)
+
+```py
+pad = xy_pad("filter", lead, "cutoff", "resonance")     # one finger, two settings
+ink = colour_picker("ink", "tomato")
+price = range_slider("price", 0, 100, [20, 80])
+bar = progress("loading")
+t = 0
+
+def update(dt):
+    global t
+    t += dt
+    bar.value = t / 10                                  # from 0 to 1
+
+def draw():
+    background("midnightblue")
+    circle(width / 2, height / 2, 60, ink.value)        # a colour, as you would write one
+```
+
+| | |
+|---|---|
+| `xy_pad(label, target, "across", "up")` | A square where one finger sets two numbers at once: across is the first and up is the second. `pad.x` and `pad.y` are the numbers, and `pad.value` is both. `xy_pad(label, [0, 100], [0, 50])` is two plain ranges, starting in the middle (a third number in a range says where). The dot comes to your finger; Shift moves it a tenth as far; two taps put it back. Options: `spring=True` (it goes back when you let go), `size=`, `on_change(x, y)`. |
+| `colour_picker(label, colour)` | A patch of the colour. A tap opens a picker: drag in the square for how strong and how bright, along the strip for the hue, or tap one of sixteen named colours. `ink.value` is the colour as you would write it (`"tomato"`, `"#3a7bd5"`), ready for a drawing call. Options: `colours=` (your own named colours, or `False` for none), `on_change(colour)`. `color_picker` is the same. |
+| `progress(label, value)` | A bar that fills, from 0 to 1 (or `min=` to `max=`). Set `bar.value`, or give it a function: `progress("loading", lambda: done / total)`. `percent=False` leaves the number out. |
+| `light(label, on)` | A light. `ready.on = True`; a number from 0 to 1 is how bright; a colour (`lamp.value = "red"`) shines that colour. `light("signal", lead)` is as bright as a target is loud, and `light("hot", lambda: heat > 90)` asks a function. |
+| `busy(label)` | A ring that goes round while something is happening; `wait.on = False` stops it. |
+| `range_slider(label, min, max, [low, high])` | A slider with two handles. `price.low` and `price.high` are the numbers. The handle nearer your finger moves, and neither passes the other. `range_slider(label, target, "start", "end")` is two settings. `on_change(low, high)`. |
+| `fader(…)` | A slider that stands upright with the look of a mixing desk's. It is a slider in every other way: `fader("volume", lead, "volume")`. |
+
+![The colour picker open under its patch: a square of one hue from white to black, a strip of hues, and sixteen named colours](images/dials-colour-picker.png)
+
+**Typing.** A canvas cannot be typed into, so while you type a real box for text lies over the control: your device's own keyboard, caret, selection and paste all work. On a phone or tablet the keyboard comes up when your finger lifts, and a number asks for the number keys. What you type goes to the box and not to the scene's `keys`. It works the same when the picture is drawn smaller or larger, when the page is scrolled, and when the scene is shut inside a frame (as a preview's is): nothing is asked of the page around it.
+
+**Keys.** The control you touched last takes the arrow keys: on a number box they step it (Shift ten at a time, Home and End go to the ends, Enter types). Space ticks a checkbox, the arrows move among choices, and on a dropdown Enter opens the list, the arrows move through it, Enter picks and Escape closes. The arrows move an XY pad's dot and the handle of a two-handled slider that was touched last. Tab goes to the next control that takes keys.
+
+### For games
+
+![A joystick pushed up and to the right, a pad of arrows with the left one lit, and two round buttons, B and A, with A pressed](images/dials-joystick-dpad-buttons.png)
+
+```py
+stick = joystick()
+fire = action_button("A")
+x, y = 200, 200
+
+def update(dt):
+    global x, y
+    x += stick.x * 300 * dt                  # each from -1 to 1, and 0 when you let go
+    y += stick.y * 300 * dt
+    if fire.pressed:
+        shoot()
+```
+
+Each finger holds its own control, so one thumb steers while the other fires.
+
+| | |
+|---|---|
+| `joystick()` | A stick for a thumb, which springs back when you let go. `stick.x` and `stick.y` are each from -1 to 1 in the scene's own directions (y goes down the picture, so `y += stick.y * speed` goes where the thumb pushes). `stick.angle` is the way it is pushed (in radians) and `stick.distance` how far, from 0 to 1. Options: `floating=True` (it appears where the thumb lands, anywhere in its box: give `width=` and `height=`), `as_keys=True`, `size=`, `on_change(x, y)`. |
+| `dpad()` | A pad of arrows. `pad.left`, `pad.right`, `pad.up` and `pad.down` are True while pressed, and `pad.x` and `pad.y` are -1, 0 or 1. A thumb slides from one arrow to the next; between two, both are pressed, unless `ways=4`. |
+| `action_button("A")` | A round button: `fire.pressed` is True once for each press and `fire.held` while it is down, as for any button. `key="space"` holds that key down for the scene while it is pressed. |
+
+**A game written for the keyboard, on a phone.** `dpad(as_keys=True)` holds the arrow keys down for the scene (`"wasd"` for those keys), so a game that asks `"ArrowLeft" in keys` is played by touch with not a line changed:
+
+```py
+dpad(as_keys=True)
+action_button("jump", key="space")
+
+def update(dt):
+    global x
+    if "ArrowLeft" in keys: x -= 300 * dt    # the keyboard, or the pad
+    if " " in keys: jump()
+```
+
+For a game, put the controls in a strip and draw in the room that is left: `with group(at="bottom", plate=False):` and `room()`.
+
+### For music
+
+![The shape of a note as a graph with four corners, a pitch wheel and a mod wheel, four pads with the kick held, and a grid of sixteen steps for kick, snare and hat with the fifth column lit](images/dials-envelope-steps-pads.png)
+
+```py
+lead, kick = make_synth("lead"), make_synth("kick")
+envelope("shape", lead)                                 # lead's attack, decay, sustain and release
+grid = step_grid("drums", 16, ["kick", "snare", "hat"])
+kit = pads("kit", ["kick", "snare", "hat", "clap"], kick)
+last = -1
+
+def update(dt):
+    global last
+    step = int(beat() * 4) % 16                         # sixteen steps to four beats
+    if step != last:
+        last = grid.step = step                         # light the column that is playing
+        if grid.get("kick", step):
+            kick.play("C2")
+```
+
+| | |
+|---|---|
+| `envelope(label, target)` | How a note begins, settles, holds and dies away, as a graph whose corners you drag: the first sets the attack, the second the decay (across) and the sustain (up and down), the last the release. It finds the target's `attack`, `decay`, `sustain` and `release` by those names, or takes the four names: `envelope("shape", lead, "a", "d", "s", "r")`. With no target, `shape.attack` and the rest are numbers to use. Two taps put it back; `on_change(attack, decay, sustain, release)`. |
+| `step_grid(label, steps, rows)` | A grid of steps, each on or off: a row for each sound. A tap turns a step over, and a finger dragged along turns on (or off) every step it crosses. `grid.value` is the rows, each a list of 0 and 1; `grid.get("kick", 0)` reads one step and `grid.put("kick", 0)` writes one; `grid.row("kick")`, `grid.clear()`. `grid.step = 3` lights that column as the one playing. On a narrow screen a long row is put on two lines. Options: `value=` (the rows to start with), `velocity=True` (drag up or down on a step for how hard, 0 to 1), `on_change(row, step, on)`. |
+| `pads(label, names, target)` | Pads to hit, several at once. Each plays a note of the target for as long as it is held (`note_on(note, velocity)`, `note_off(note)`), harder the nearer its middle it is hit. Pads named for drums play those drums' notes (a kick is 36, a snare 38, a hat 42); others count up from 36, or are told with `notes=`. `kit.held` is the names of the pads held now; `kit.flash("kick")` lights one from your code; `kit.hit("kick")` and `kit.lift("kick")` play one. Options: `notes=`, `columns=`, `size=`, `on_note_on(note, velocity, name)`, `on_note_off(note, name)`. |
+| `pitch_wheel(label, target, "setting")` | A wheel that is rolled, and rolls back to where it started when you let go. Alone, `bend = pitch_wheel("bend")` runs from -1 to 1. |
+| `mod_wheel(…)`, `wheel(…)` | The same wheel, which stays where it is put (`spring=True` makes it roll back). Both are sliders in every other way. |
+
+**Patterns: a gate, an arpeggio and a drum sequencer.**
+
+![A gate's pattern as sixteen bars of different heights with its rate, depth and smoothing beside it, and an arpeggio's pattern as a grid of notes with a tied note, an accent and a slide, with its pattern, rate, octaves and style beside it](images/dials-gate-arp-patterns.png)
+
+```py
+gate_pattern("gate", pad)                               # pad's gate pattern, with its rate and depth beside it
+arp_pattern("arp", lead)                                # lead's arpeggio
+mine = gate_pattern("chop", "x.x.x5x.X.3.xx..")         # or one of your own: mine.value, mine.text
+```
+
+| | |
+|---|---|
+| `gate_pattern(label, target)` | The steps that open and shut a sound in time, each a bar as tall as the gate is open. Tap a bar on and off, drag up and down on it for its level, drag across to draw a line of them. The − and + at its corner set how many steps (up to 32, or what the target says). |
+| `arp_pattern(label, target)` | An arpeggio's pattern: steps across, and the notes of the chord up the side (1 is its root; the rows above are the same notes an octave up). Tap a cell and that step plays that note; tap it again for a rest; drag sideways from it and the note is held across the next steps. The lane under the grid gives a step an accent, and a second one a slide where the target has slides. `arp.preset("up-down")` writes a pattern by name (`"up"`, `"down"`, `"up-down"`). Options: `notes=` (how many notes of the chord, 4), `octaves=` (2), `steps=`, `slide=`. |
+| `steps(label, 16)` | The lane of steps that the two above, and a row of a grid, are made of, to use for anything: a row of accents, a setting that changes each step. Tap and drag across; `levels=True` makes each a bar, `accents=True` gives an accent to a step you drag up on. `steps(label, target, "setting")` ties it to a setting. |
+| `drum_seq(label, drums, target)` | A drum sequencer that plays by itself: see below. |
+
+Each has `value` (a list: levels from 0 to 1 for a gate or a lane, and for an arpeggio a step each, a dict with `note`, `octave`, `tie`, `accent` and `slide`, note 0 for a rest), `text` (the same as text), `length`, and `step`: set `gate.step = 3` and that step is lit as the one sounding. Any of `value` and `text` may be set, and `on_change(value)` hears a hand, a frame later.
+
+**As text**, a pattern can be saved, pasted into your code and handed to a target that keeps it that way:
+
+| | |
+|---|---|
+| a gate, a lane, a drum's row | one mark a step: `.` off, `x` on, `X` on with an accent, `1` to `9` on at that many tenths. Spaces and `\|` are for the eye: `"x...x... \| x.5.X..."`. |
+| an arpeggio | words with spaces between: `1` `2` `3` that note of the chord, `-` a rest, `_` the note before held on; after a note `^` an octave up (`v` down), `!` an accent, `~` a slide: `"1 - 3 2 _ 1! 3~ 5^"`. |
+
+**Tied to a target**, a pattern is ONE setting of it, found by name when you give none (`gate_pattern`, `arp_pattern`, or `pattern`). It is read and written as the target keeps it: as text if the setting is text, else as a list. `describe(name)` may say `max` (the most steps) and, for an arpeggio, `notes`, `octaves` and `slide`. A target that has `step()` or `position()` lights the step that is sounding. The settings that go with it are put beside it on the same plate when the target has them (a rate, depth, smoothing and swing for a gate; a rate, order, octaves, length and style for an arpeggio): a `select` for one that is a choice and a small dial for a number. `beside=False` leaves them out. The marks of the text and the names looked for are each one small table in `dials.js` (`STEP_MARKS`, `ARP_MARKS`, `BESIDE`), and the marks again in `pydials` (`STEP_MARKS`, `ARP_MARKS`), so they are changed in one place each.
+
+![A drum sequencer: play, a tempo of 124 with a minus and a plus, swing, four rows of sixteen steps for kick, snare, hat and clap with the seventh column lit and the clap's row muted, a breakbeat chosen, and clear](images/dials-drum-seq.png)
+
+```py
+drums = drum_seq("beat", ["kick", "snare", "hat", "clap"], make_synth("kick"), pattern="backbeat", tempo=110)
+```
+
+`drum_seq` is a whole drum machine in one control. Tap a step on and off, drag across to paint, and drag up on a step for an accent. Tap a drum's name to hear it and the dot beside it to mute its row. Its own strip has play and stop, the tempo (− and +, or tap the number in time), swing, starter patterns (four on the floor, a backbeat, a breakbeat) and clear. On a phone it shows as many steps as fit a finger, a page at a time, and turns the page as it plays.
+
+It plays whatever it is given: `target` (or `targets=`, a list or a dict by the drums' names) is anything with `note_on(note, velocity)`, and each row plays its drum's note (a kick is 36, a snare 38, a hat 42, a clap 39; `notes=` says otherwise). `on_step(drum, step, velocity)` hears every step that sounds. From code: `drums.play()`, `drums.stop()`, `drums.tempo`, `drums.swing`, `drums.pattern("breakbeat")`, `drums.mute("hat")`, `drums.get("kick", 0)`, `drums.put("kick", 0)`, `drums.value` (the rows) and `drums.text` (a line of marks for each drum).
+
+**Keeping time.** The page plays the beat, not Python, so a target that lives in the page (a synth) is in time however busy Python is. If that target (or `clock=`) offers `time()`, in seconds, it is handed each step a little before it is due, as `noteOn(note, velocity, { at })`, to play at exactly that time; with no such clock a step is played on the frame it falls due, and the beat will wobble when the page is busy. A Python object given as a target is played a frame after its step.
+
+
+
+
+A whole program with some of each, to run as it is:
+
+```python
+from synths import *
+from pydials import *
+
+lead, kick = make_synth("lead"), make_synth("kick")
+
+with group("game"):
+    lives = number("lives", 0, 9, 3)
+    sound = checkbox("sound", True)
+    mode = choose("mode", ["easy", "medium", "hard"])
+    stick = joystick()
+with group("music"):
+    envelope("shape", lead)
+    xy_pad("filter", lead, "cutoff", "resonance")
+    grid = step_grid("drums", 8, ["kick", "hat"])
+    pads("kit", ["kick", "snare"], kick)
+    accents = steps("accent", 8)
+with group("a drum machine in one line"):
+    drum_seq("beat", ["kick", "snare", "hat"], kick, pattern="backbeat", tempo=110)
+bar = progress("time")
+ready = light("ready", True)
+x, t, last = 0.5, 0, -1
+
+def update(dt):
+    global x, t, last
+    t += dt
+    x = min(1, max(0, x + stick.x * dt))
+    bar.value = (t / 10) % 1
+    step = int(beat() * 2) % 8
+    if step != last:
+        last = grid.step = step
+        if sound and grid.get("kick", step):
+            kick.play("C2")
+
+def draw():
+    background("midnightblue")
+    area = room()
+    circle(area.x + x * area.width, area.y + area.height / 2, 8 + 4 * lives, "gold")
 ```
 
 ## A button in a game

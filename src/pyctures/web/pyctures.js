@@ -1186,7 +1186,12 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       if (Object.keys(aliases).length) d.aliases = aliases
     }
     // What the library says of how a value is shown is passed on: words for particular values (in the name's own measure), and a way to write it.
-    if (entry.labels) { d.labels = {}; for (const at in entry.labels) d.labels[Number(at) / scale] = entry.labels[at] }
+    if (entry.labels) {
+      d.labels = {}
+      for (const at in entry.labels) d.labels[Number(at) / scale] = entry.labels[at]
+      // Where nothing is one of them (a reverb_decay of 0 is "auto"), the dial still starts from nothing.
+      if (d.log && 0 in d.labels) { d.min = 0; d.logFrom = 0.001 }
+    }
     if (typeof entry.format === 'function') d.format = entry.format
     return d
   }

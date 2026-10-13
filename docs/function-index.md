@@ -631,6 +631,13 @@ These come with `from pydials import *` at the top of the scene. Explained in [D
 | `rotary(label, choices)` | A knob that clicks between a few choices; or a setting of a synth: `rotary("space", lead, "reverb_type")` |
 | `keyboard(target, octave=4)` | A piano keyboard that plays a synth |
 | `scope(source)`, `meter(source)` | A wave, or any value over time; a level |
+| `number(label, min, max, start)`, `text_box(label, text)`, `readout(label, fn)` | A number box with − and +, a line of text to type, and a value shown |
+| `checkbox(label, on)`, `choose(label, choices)`, `radio(...)`, `dropdown(label, choices)` | A box that is ticked; one of a few, all in sight; one of a long list |
+| `xy_pad(label, target, "across", "up")`, `range_slider(label, min, max, [low, high])`, `fader(...)` | Two numbers under one finger, a slider with two handles, and an upright slider |
+| `colour_picker(label, colour)`, `progress(label, value)`, `light(label, on)`, `busy(label)` | A colour to pick, a bar that fills, a light, and a ring that goes round |
+| `joystick()`, `dpad()`, `action_button(label)` | For games: a stick for a thumb, a pad of arrows, a round button |
+| `envelope(label, target)`, `step_grid(label, steps, rows)`, `pads(label, names, target)`, `pitch_wheel(...)`, `mod_wheel(...)`, `wheel(...)` | For music: the shape of a note as a graph, a grid of steps, pads to hit, and wheels |
+| `steps(label, 16)`, `gate_pattern(label, target)`, `arp_pattern(label, target)`, `drum_seq(label, drums, target)` | A lane of steps, a gate's and an arpeggio's pattern, and a drum sequencer that plays by itself |
 | `label(text)` | Words; made just before some controls, their heading |
 | `with group(title):`, `with row():`, `with column():`, `with grid(3):` | Controls kept together on a titled plate; in a line, one under another, or in columns |
 | `row()`, `wrap()`, `spacer()` | A new line, where a line may be split, and the room left over |

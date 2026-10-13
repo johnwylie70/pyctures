@@ -46,7 +46,8 @@ def cdn_reachable():
 @pytest.fixture(scope="module")
 def browser():
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+        # (A scene that asks for the microphone is never given this computer's: Chromium's pretend one stands in its place.)
+        b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--use-fake-device-for-media-stream"])
         yield b
         b.close()
 

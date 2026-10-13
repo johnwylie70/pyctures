@@ -22,6 +22,8 @@ The notes are written the way [`play_notes`](sound.md) takes them: a note is a l
 
 `page.play()` plays it and follows it: the notes that are sounding turn orange, a line moves through the bar, and the page turns when the music reaches the next line. Tap a note to hear it. Tap a bar to play from there.
 
+Two notes joined by a curved line are one note, held: that is a tie, and it is how a note is written when it lasts across a beat or a bar line. Both light together and you hear one sound.
+
 `from pynotation import *` brings the sound with it, so nothing else need be imported to hear the page. The first click, tap or key press on a page turns its sound on, as browsers require. A tune that is asked for before that waits, and begins when the sound is on: the line never moves through notes nobody can hear.
 
 ## What you can show
@@ -98,17 +100,18 @@ A tracker song (see [Sound and music](sound.md)) is written out from its own fil
 
 ```py
 from pyctures import *
-from synths import *
 from pynotation import *
 
-song = play_song("tune.json")
-page = show_notes("tune.json", channels=[0, 1], follow=song)
+page = show_notes("tune.json", channels=[0, 1])
+page.play()
 
 def draw():
     background("#0b1020")
-    words = "bar %d" % page.bar if song.position["state"] == "playing" else "Tap to start the song"
+    words = "bar %d" % page.bar if page.bar else "Tap to start the song"
     text(words, width / 2, height - 24, "white", 18, "centre")
 ```
+
+A page that shows a song plays the song itself: `page.play()` hands it to the sound library, which plays it with its own instruments, round and round (`repeat=False` for once), and the page follows. `patches={"tune": "bell"}` says what the song's synths are, as `play_song` takes it. `page.bar` is the bar the song is in, and 0 until it has begun. A song you have started yourself is followed with `follow`: `show_notes("tune.json", follow=play_song("tune.json"))`.
 
 Tap a bar and the song jumps there. A song's rows become beats (four rows to a beat at the usual speed), a note lasts until the next on its channel, a chord is written as a chord and an arpeggio as its chord with a wavy line beside it, and drums get a staff of their own. Notes that slide or bend are written as the notes they start from: the slide itself is not shown. `channels` chooses which channels and in what order, `grand=True` puts the tuned ones together on a piano's two staves, and `drums=["kick", "snare"]` says which instruments are drums when their names do not.
 
@@ -161,10 +164,10 @@ After the music and the step: `show_notes("C4 D4", "quarter", key="G", tempo=90)
 
 | | |
 |---|---|
-| `page.play()` | play it and follow it. `page.play(start=8)` begins eight beats in; `tempo=90` |
+| `page.play()` | play it and follow it. `page.play(start=8)` begins eight beats in; `tempo=90`. A page that shows a song plays the song |
 | `page.stop()`, `page.playing` | stop it; is it playing? |
 | `page.follow(song)` | follow a song from `play_song`, or a function that gives how many beats have gone by |
-| `page.beat`, `page.bar`, `page.sounding` | where the music has got to, and the notes sounding, as the page last said |
+| `page.beat`, `page.bar`, `page.sounding` | where the music has got to (`bar` counts from 1, and is 0 until it has begun), and the notes sounding, as the page last said |
 | `page.on_note`, `page.on_bar`, `page.on_tap`, `page.on_done` | yours to set: a note began, a bar began, a note or a bar was tapped, the music ended |
 | `page.play_along("wait")`, `page.note_on(note)`, `page.note_off(note)`, `page.result` | playing along |
 | `page.seek(5)`, `page.show(music)` | go to bar 5; show other music in its place |

@@ -61,7 +61,7 @@ CONTROLS = """async () => {
 @pytest.fixture(scope="module")
 def browser():
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+        b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
         yield b
         b.close()
 
@@ -79,6 +79,20 @@ def build(tmp_path, source, html=False):
     said = []
     make(scene, out, say=said.append)
     return out, said
+
+
+def placed(page, timeout=10):
+    """The controls once they have come to rest: the panel lays itself out again as plates wrap and the keyboard
+    slides in, so where a control is counts only when two looks a moment apart agree."""
+    end = time.time() + timeout
+    last = None
+    while True:
+        now = page.evaluate(CONTROLS)
+        if now and last is not None and [(c["x"], c["y"], c["w"], c["h"]) for c in now] == [(c["x"], c["y"], c["w"], c["h"]) for c in last]:
+            return now
+        assert time.time() < end, "the controls never came to rest"
+        last = now
+        page.wait_for_timeout(150)
 
 
 def requests_of(page):
@@ -274,7 +288,7 @@ def test_run_a_song_is_heard(browser, pyctures_run, tmp_path):
 
 def drag_the_dial_and_play_a_key(w):
     page = w.page
-    made = page.evaluate(CONTROLS)
+    made = placed(page)
     assert [(c["kind"], c["label"]) for c in made] == [("dial", "cutoff"), ("dial", "resonance"), ("slider", "attack"),
                                                         ("scope", ""), ("keyboard", "")]
     dial, attack, piano = made[0], made[2], made[4]
@@ -352,7 +366,7 @@ def draw():
     w = Watched(browser, server.url, size=(900, 600))
     w.wait_running()
     page = w.page
-    wait_for(page, lambda: len(page.evaluate(CONTROLS)) == 5, "the controls")
+    wait_for(page, lambda: len(page.evaluate(CONTROLS)) == 5, "the controls", 30)
     page.mouse.click(450, 300)           # the first touch turns the sound on
     page.keyboard.down("a")
     page.keyboard.up("a")
@@ -392,7 +406,7 @@ def test_no_eval_is_needed(browser, pyctures_run, tmp_path):
     page.on("pageerror", lambda e: refused.append(str(e)))
     page.goto(server.url)
     page.wait_for_selector('[data-pyctures-status="running"]')
-    wait_for(page, lambda: len(page.evaluate(CONTROLS)) == 5, "the controls")
+    wait_for(page, lambda: len(page.evaluate(CONTROLS)) == 5, "the controls", 30)
     assert page.evaluate("window.evalWorks") is False, "the policy is in force: the page's own eval is refused"
     refused[:] = [r for r in refused if "probe.js" not in r and "'unsafe-eval'" not in r]     # that refusal is the test's own
     page.mouse.move(30, 580)

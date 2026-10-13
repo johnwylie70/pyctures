@@ -19,7 +19,7 @@ def measure(url, rate=1, seconds=10, warmup=4, size=(800, 600), browser=None):
     pw = None
     if own:
         pw = sync_playwright().start()
-        browser = pw.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+        browser = pw.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
     page = browser.new_page(viewport={"width": size[0], "height": size[1]})
     if rate > 1:
         cdp = page.context.new_cdp_session(page)
@@ -71,7 +71,7 @@ def main():
     ap.add_argument("--seconds", type=int, default=10)
     a = ap.parse_args()
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+        browser = pw.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
         for url in a.urls:
             for rate in a.throttle or [1]:
                 print(json.dumps(measure(url, rate, a.seconds, browser=browser)), flush=True)

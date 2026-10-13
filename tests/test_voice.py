@@ -15,7 +15,7 @@ import pytest
 
 from conftest import EXAMPLES, ROOT
 from test_browser import Watched, cdn_reachable
-from test_sound import CONTROLS, SCENE, build, requests_of, wait_for, write
+from test_sound import CONTROLS, SCENE, build, placed, requests_of, wait_for, write
 
 playwright = pytest.importorskip("playwright.sync_api")
 
@@ -65,7 +65,7 @@ HEARD = """() => {
 @pytest.fixture(scope="module")
 def browser():
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--use-fake-device-for-media-stream"])
+        b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--use-fake-device-for-media-stream"])
         yield b
         b.close()
 
@@ -115,7 +115,7 @@ class Page(Watched):
         self.page.wait_for_timeout(wait)
 
     def control(self, label):
-        for c in self.page.evaluate(CONTROLS):
+        for c in placed(self.page):
             if c["label"] == label:
                 return c
         raise AssertionError("no control called %s" % label)

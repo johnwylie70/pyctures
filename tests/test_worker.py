@@ -19,7 +19,7 @@ pytestmark = pytest.mark.skipif(not cdn_reachable(), reason="Pyodide's CDN is no
 @pytest.fixture(scope="module")
 def browser():
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader",
+        b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader",
                                     "--enable-unsafe-webgpu"])
         yield b
         b.close()

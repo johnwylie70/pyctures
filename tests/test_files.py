@@ -442,7 +442,7 @@ print("count", count, load_json("data/runs.json"), [row["n"] for row in db.query
 @pytest.fixture(scope="module")
 def browser():
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch()
+        b = p.chromium.launch(args=["--mute-audio"])
         yield b
         b.close()
 

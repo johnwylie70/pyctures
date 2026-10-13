@@ -223,7 +223,7 @@ def shots(out):
     server = Serve(out)
     try:
         with sync_playwright() as p:
-            b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+            b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
             for name, *_ in SCENES:
                 stem = Path(name).stem
                 page, scene = open_scene(b, server.url + stem + ".html", (1280, 900))
@@ -243,7 +243,7 @@ def gif(out, target, seconds=3.0, fps=15):
     n = 0
     try:
         with sync_playwright() as p:
-            b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+            b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
             for name in GIF_SCENES:
                 page, scene = open_scene(b, server.url + Path(name).stem + ".html", (1100, 900))
                 page.wait_for_timeout(1500)
@@ -277,7 +277,7 @@ def readme_stills():
         server = Serve(tmp / "site")
         try:
             with sync_playwright() as p:
-                b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+                b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
                 for name, _ in stills:
                     page = b.new_page(viewport={"width": 640, "height": 360}, device_scale_factor=2)
                     page.goto(server.url + name + "/index.html")

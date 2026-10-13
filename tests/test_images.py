@@ -137,7 +137,7 @@ def browser():
     if playwright is None:
         pytest.skip("needs Playwright:  pip install playwright && playwright install chromium")
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch(args=["--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+        b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
         yield b
         b.close()
 

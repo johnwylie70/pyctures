@@ -533,6 +533,31 @@ def test_run_a_sample_is_sent_by_python(browser, pyctures_run, tmp_path):
     assert not w.errors, w.errors
 
 
+BUFFER = "from pyctures import *" + TUNE + '''
+set_sound_buffer("large")
+
+def update(dt):
+    now = sound_buffer()
+    js.pyState = [now["thread"], now["setting"], now["frames"], now["delay"], now["underruns"]]
+'''
+
+
+def test_the_sound_buffer_is_set_in_python_and_read_back(browser, pyctures_run, tmp_path):
+    """set_sound_buffer travels to the page's player, and what the player says comes back with a frame. On the
+    audio thread (this page is localhost's) the size is how far ahead everything is scheduled: 4096 frames."""
+    server = pyctures_run(write(tmp_path, BUFFER))
+    w = Watched(browser, server.url)
+    w.wait_running()
+    listen(w)
+    page = w.page
+    wait_for(page, lambda: (page.evaluate("window.pyState") or [None])[0] == "audio", "Python to be told the buffer")
+    thread, setting, frames, delay, underruns = page.evaluate("window.pyState")
+    assert (setting, frames, underruns) == (4096, 128, 0)
+    assert abs(delay - 4096 / page.evaluate("%s.sound.player.context.sampleRate" % SCENE) * 1000) < 2, delay
+    assert page.evaluate("%s.sound.player.buffer().setting" % SCENE) == 4096
+    assert not w.errors, w.errors
+
+
 LAID_OUT = '''
 from pyctures import *
 from synths import *
@@ -611,6 +636,9 @@ def test_a_wave_offers_a_sample_only_to_a_synth_that_has_one(browser, pyctures_r
     wait_for(page, lambda: page.evaluate(CHOSEN)["wave"]["choices"] == plain + ["sample"], "the wave to offer the sample")
     assert page.evaluate(CHOSEN)["picked"]["choices"] == plain + ["sample"]
     assert page.evaluate("%s.sound.synth('s1').get('wave')" % SCENE) == "sample"
+    # And they turn to it, since the wave was changed in code.
+    wait_for(page, lambda: [page.evaluate(CHOSEN)[name]["on"] for name in ("wave", "picked")] == ["sample", "sample"], "both to turn to the sample")
+    assert page.evaluate("%s.sound.synth('s1').describe('wave').aliases" % SCENE)["square"] == "pulse"
     assert not w.errors, w.errors
 
 

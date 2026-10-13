@@ -191,6 +191,15 @@ stop_sound()         # stop everything that is sounding or waiting to sound
 
 A scene that scrolls out of view, or whose tab is hidden, goes quiet until it is seen again.
 
+### If the sound clicks
+
+```py
+set_sound_buffer("large")        # "small" (1024 frames), "medium" (2048), "large" (4096), "auto", or a number of frames
+now = sound_buffer()             # {"frames": 4096, "delay": 179, "thread": "page", "underruns": 0, "setting": 4096}
+```
+
+A page that is not served over https (`pyctures run` opened on a phone or an iPad by the computer's address) makes its sound on the page's own thread, a buffer at a time, and clicks when the page is busy for longer than a buffer lasts. A larger buffer rides over that and is heard later: `"large"` is about a fifth of a second from a key to its note, `"small"` a twentieth. `"auto"` lets the page choose, and double it once if it keeps clicking. It may be called before the first sound or at any time. `delay` is the milliseconds from a key to its note, `underruns` counts the clicks, and `thread` is `"page"` there and `"audio"` on an https page or on the computer itself, where there is nothing to fix and the same call sets how far ahead everything is scheduled instead. What `sound_buffer()` says is what the page last said: a frame late, and all zeros before it has.
+
 ## Songs
 
 A song is a whole piece of music in one file, played by the sound engine itself: a tracker's `.mod` or `.xm` file, or a song in synths' own format.

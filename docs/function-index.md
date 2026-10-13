@@ -594,6 +594,7 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `chord_notes(name)`, `note_number(note)` | The notes of a chord, and a note as a number |
 | `set_effects(...)` | The echo, reverb and chorus every synth shares |
 | `set_tempo(bpm)`, `beats(n)`, `beat()`, `length_beats(name)`, `sound_time()` | The beat, and the sound clock |
+| `set_sound_buffer(size)`, `sound_buffer()` | How much sound is made at a time (`"small"`, `"medium"`, `"large"`, `"auto"`, or frames), for a page that clicks; and what it is now |
 | `set_volume(v)`, `mute_sound()`, `unmute_sound()`, `stop_sound()` | All the sound |
 | `main_synth()`, `sound_output()` | The synth `play_note` uses, and all the sound together, for dials and scopes |
 | `sound_names()`, `synth_names()`, `setting_names()` | What there is |

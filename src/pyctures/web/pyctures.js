@@ -1178,7 +1178,16 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
     // A time from nothing to twenty seconds is turned evenly by how much longer it gets, from a thousandth of a second:
     // half the dial is then the short times that an attack or a release is nearly always set to.
     if (entry.unit === 'seconds' && entry.min === 0 && entry.max >= 1) { d.min = 0.001; d.log = true }
-    if (entry.choices) { d.choices = [...entry.choices]; d.default = entry.default }
+    if (entry.choices) {
+      d.choices = [...entry.choices]; d.default = entry.default
+      // Other words for a choice ("square" is "pulse"), so a control follows a wave set by either name.
+      const aliases = { ...entry.aliases }
+      for (const word in t.words) if (entry.choices.includes(t.words[word]) && !entry.choices.includes(word)) aliases[word] = t.words[word]
+      if (Object.keys(aliases).length) d.aliases = aliases
+    }
+    // What the library says of how a value is shown is passed on: words for particular values (in the name's own measure), and a way to write it.
+    if (entry.labels) { d.labels = {}; for (const at in entry.labels) d.labels[Number(at) / scale] = entry.labels[at] }
+    if (typeof entry.format === 'function') d.format = entry.format
     return d
   }
   // "sample" is a wave only for a synth that has been given a sample to play: synths.js's rule (its makeTarget), kept

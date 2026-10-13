@@ -613,17 +613,22 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `note(note, length)`, `chord(name, length)`, `rest(length)` | A tune a line at a time: each begins where the last ended. A length is `"quarter"`, `"eighth"`, or a number of beats |
 | `loop_notes()`, `start_lines()` | `with loop_notes():` has a section go round; `start_lines()` begins every line again |
 | `make_synth(name, ...)` | A synth of your own: `.play`, `.start`, `.stop`, `.play_notes`, `.arp`, and its settings as attributes |
+| `lead.play(note, length, bend=, glide=, slide=, vibrato=)` | A note whose pitch moves: `bend="scoop"`, `"fall"`, `"dip"` or `{"to": 2, "over": "eighth"}`, `glide` from the last note, `slide=12`, `vibrato=True`. Also on `start` and `play_note`; a held note has `vibrato()` |
+| `pad.trance_gate = "x.x.xx.x"`, `pad.set_trance_gate(pattern, rate=, depth=)`, `pad.trance_gate_step()` | The trance gate: a synth's sound chopped in a pattern of steps on the beat, with the settings `trance_gate_rate`, `trance_gate_depth`, `trance_gate_smooth`, `trance_gate_swing`, `trance_gate_stereo`, `trance_gate_sends` |
+| `lead.arp_pattern = "trance"`, `lead.arp_step()` | A pattern of the synth's own that its arpeggios follow, and the step that is sounding |
+| `lead.note_on(note, velocity, at=)`, `lead.note_off(note, at=)` | A key down and up, at a time of `sound_time()` for a sequencer of your own |
 | `load_sample(path)` | A recorded sound from a file, as a synth |
 | `load_samples(files)` | Several recordings as one instrument: `load_samples({"C2": "piano-C2.wav", "C3": "piano-C3.wav"})`; `kit=True` is a drum kit |
 | `play_arp(chord)`, `start_arp(chord)` | A chord as an arpeggio: fast on one voice, or with `step="sixteenth"` a note struck at each step in time with the tempo, with `gate`, `octaves`, `swing`, `accent`, `pattern` and `order` |
 | `chord_notes(name)`, `note_number(note)` | The notes of a chord, and a note as a number |
-| `set_effects(...)` | The echo, reverb and chorus every synth shares |
+| `set_effects(...)` | The echo, reverb and chorus every synth shares; `reverb_level` and `echo_level` are how loud each comes back |
 | `set_tempo(bpm)`, `beats(n)`, `beat()`, `length_beats(name)`, `sound_time()` | The beat, and the sound clock |
 | `set_sound_buffer(size)`, `sound_buffer()` | How much sound is made at a time (`"small"`, `"medium"`, `"large"`, `"auto"`, or frames), for a page that clicks; and what it is now |
 | `set_volume(v)`, `mute_sound()`, `unmute_sound()`, `stop_sound()` | All the sound |
 | `main_synth()`, `sound_output()` | The synth `play_note` uses, and all the sound together, for dials and scopes |
 | `sound_names()`, `synth_names()`, `setting_names()` | What there is |
 | `play_song(path)` | A song from a file (`.mod`, `.xm`): `.pause()`, `.resume()`, `.stop()`, `.seek(part)`, `.volume` |
+| `song.channel(n).volume`, `.pan`, `.reverb`, `.echo`; `song.loop(start, end)` | A channel's place in the song's mix, moved while it plays; and a stretch of the song that goes round |
 | `song.mute(channel)`, `song.solo(channel)`, `song.loop_pattern()`, `song.replace(song)` | One channel silenced or heard alone, the pattern going round, and an edited song put in its place |
 | `song.position`, `song.channel(n).level()` | Where the song is and what a channel is doing, for drawing them (a frame late) |
 | `lead.samples()`, `lead.level()`, `lead.notes()` | What a synth is doing, for your own scope, meter and lit keys (a frame late). Also on `sound_output()` and the microphone |

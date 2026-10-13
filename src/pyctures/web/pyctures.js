@@ -1121,11 +1121,19 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       if (c.voice != null) wear(c.id, c.voice)
       synths.get(c.id).set.push(...Object.entries(c.set || {}))
       if (sampled(c.id) !== had) changed(c.id)
-    } else if (c.op === 'set' && (c.set || c.voice != null)) {
+    } else if (c.op === 'set' && (c.set || c.voice != null || c.arpPattern !== undefined || c.tranceGate !== undefined)) {
       const had = sampled(c.id)
       if (!synths.has(c.id)) synths.set(c.id, { preset: 'keys', set: [] })
       if (c.voice != null) wear(c.id, c.voice)
       if (c.set) synths.get(c.id).set.push(...Object.entries(c.set))
+      // Its two patterns, each kept as its text. Given a trance gate the depth is made 1 unless it has one, and
+      // with the gate taken away it is 0, as the player makes it (synths.js docs/commands.md, `set`).
+      for (const which of PATTERNS) {
+        if (c[which] === undefined) continue
+        const mine = synths.get(c.id), text = patternText(which, c[which])
+        mine.patterns = { ...mine.patterns, [which]: text }
+        if (which === 'tranceGate') { if (!text) mine.set.push(['gate.depth', 0]); else if (!(valueOf(listsOf(c.id), 'gate.depth') > 0)) mine.set.push(['gate.depth', 1]) }
+      }
       if (sampled(c.id) !== had) changed(c.id)
     } else if (c.op === 'zones') {
       // Several recordings as one instrument (load_samples): they are the sample its wave plays.
@@ -1161,7 +1169,8 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   function settings() {
     if (!table && mod && mod.describe) {
       const d = mod.describe(), byName = new Map()
-      table = { names: new Map(), synths: d.synths || {}, plain: d.plain || {}, words: d.choiceWords || {}, voices: {}, voiced: [], mic: (d.microphone && d.microphone.names) || {} }
+      table = { names: new Map(), synths: d.synths || {}, plain: d.plain || {}, words: d.choiceWords || {}, voices: {}, voiced: [], mic: (d.microphone && d.microphone.names) || {},
+        patterns: { arpPattern: (d.arp && d.arp.patternSteps) || {}, tranceGate: (d.tranceGate && d.tranceGate.patterns) || {} } }
       for (const name in d.voices || {}) {
         table.voices[name] = d.voices[name].values || {}
         for (const setting in table.voices[name]) if (!table.voiced.includes(setting)) table.voiced.push(setting)
@@ -1247,6 +1256,23 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   // A control tied to a synth is told when what describe says of a setting has changed (dials.js's onChange).
   const heeding = new Map()    // id -> the functions to call
   const changed = (id) => { for (const fn of heeding.get(id) || []) { try { fn() } catch (e) { console.error(e) } } }
+  // A synth's two patterns (its arpeggios' and its trance gate's), by the names a set command carries them under.
+  const PATTERNS = ['arpPattern', 'tranceGate']
+  const patternOf = (name) => PATTERNS.find((which) => nameKey(which) === nameKey(name))
+  // A pattern as its text: a built-in one by its name, a list of steps joined as the library joins them, '' for none.
+  function patternText(which, given) {
+    if (Array.isArray(given)) given = which === 'arpPattern' ? given.map((step) => (step === 0 || step == null ? '-' : String(step).trim())).join(' ') : given.map((v) => (v >= 1 ? 'x' : v <= 0 ? '.' : String(Math.round(v * 9)))).join('')
+    const text = typeof given === 'string' ? (which === 'arpPattern' ? given.trim().replace(/\s+/g, ' ') : given.replace(/\s+/g, '').toLowerCase()) : ''
+    if (['', 'off', 'none'].includes(text.toLowerCase())) return ''
+    const named = table && table.patterns[which][text.toLowerCase()]
+    return named || text
+  }
+  // What a control is told a pattern is, as synths.js's own describe says it: its text, the built-in ones, and its name if it is one.
+  function describePattern(id, which) {
+    const text = ((synths.get(id) || {}).patterns || {})[which] || '', all = (settings() || { patterns: {} }).patterns[which] || {}
+    const named = text ? Object.keys(all).find((name) => all[name] === text) : undefined
+    return { name: which, kind: 'pattern', default: '', value: text, steps: 32, patterns: { ...all }, ...(named ? { named } : {}) }
+  }
   const reading = (id) => (player && player.read ? player.read(id, scope) : elsewhere && typeof host.read === 'function' ? host.read(id, scope) : null) || NO_READING
 
   // What has been asked of a synth, oldest first: the plain settings, its ready-made synth's, and its own.
@@ -1289,18 +1315,23 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
     return {
       id,
       describe: (name) => (special(name) === 'voice' ? { name: 'voice', kind: 'choice', min: 0, max: voices().length - 1, default: 'none', choices: voices() }
-        : special(name) === 'listening' ? { name: 'listening', kind: 'bool', min: 0, max: 1, default: false } : describeFor(id, named(name))),
+        : special(name) === 'listening' ? { name: 'listening', kind: 'bool', min: 0, max: 1, default: false }
+        : patternOf(name) ? describePattern(id, patternOf(name)) : describeFor(id, named(name))),
       onChange: (fn) => {
         if (typeof fn !== 'function') return null
         if (!heeding.has(id)) heeding.set(id, new Set())
         heeding.get(id).add(fn)
         return () => { const all = heeding.get(id); if (all) all.delete(fn) }
       },
-      get: (name) => (special(name) === 'voice' ? (synths.get(id) || {}).voice || 'none' : special(name) === 'listening' ? !!(synths.get(id) || {}).listening : valueOf(lists(), named(name))),
+      get: (name) => (special(name) === 'voice' ? (synths.get(id) || {}).voice || 'none' : special(name) === 'listening' ? !!(synths.get(id) || {}).listening
+        : patternOf(name) ? ((synths.get(id) || {}).patterns || {})[patternOf(name)] || ''
+        : nameKey(name) === 'arpstep' ? reading(id).arpStep ?? -1 : nameKey(name) === 'trancegatestep' ? reading(id).tranceGateStep ?? -1
+        : valueOf(lists(), named(name))),
       set: (name, value) => {
         // A control gives a choice as its number in the list, and a switch as 1 or 0.
         if (special(name) === 'voice') return own({ op: 'set', id, voice: typeof value === 'number' ? voices()[value] || 'none' : String(value) })
         if (special(name) === 'listening') return own({ op: 'mic', id, listen: value === true || value === 1 || value === 'on' })
+        if (patternOf(name)) return own({ op: 'set', id, [patternOf(name)]: patternText(patternOf(name), value) })
         const set = { [named(name)]: value }
         if (isMic()) {
           const k = nameKey(name)
@@ -1368,7 +1399,7 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
         }
         const r = reading(id || undefined), samples = new Array(r.samples.length)
         for (let i = 0; i < samples.length; i++) samples[i] = Math.round(r.samples[i] * 1000) / 1000
-        list.push({ type: 'reading', id: id || null, samples, level: [r.level[0] || 0, r.level[1] || 0], notes: Array.from(r.notes || []) })
+        list.push({ type: 'reading', id: id || null, samples, level: [r.level[0] || 0, r.level[1] || 0], notes: Array.from(r.notes || []), arpStep: r.arpStep ?? -1, tranceGateStep: r.tranceGateStep ?? -1 })
       }
       tellSound(list)
     },

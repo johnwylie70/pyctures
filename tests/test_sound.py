@@ -595,6 +595,57 @@ def test_a_musical_arpeggio_strikes_the_notes_of_its_chord_in_time(browser, pyct
     assert not w.errors, w.errors
 
 
+GATED = '''
+from pyctures import *
+from synths import *
+set_tempo(240)
+pad = make_synth("pad")
+pad.trance_gate = "trance"
+pad.set_trance_gate("x.x.xx.x", rate="sixteenth", depth=0.9)
+pad.arp_pattern = [1, 0, 3, 2]
+pad.arp("Am", 60, step="sixteenth")
+held = pad.start("A2", bend="scoop", vibrato=True)
+
+def update(dt):
+    js.pyState = [pad.trance_gate, pad.arp_pattern, pad.trance_gate_step(), pad.arp_step(), pad.trance_gate_depth]
+'''
+
+
+def test_the_trance_gate_and_a_pattern_from_python_are_the_page_s_too(browser, pyctures_run, tmp_path):
+    """pad.trance_gate and pad.arp_pattern travel as text, the page's own object for the synth describes each as a
+    pattern (for a control), a control's change is sent on, and Python reads the step that is sounding a frame late."""
+    server = pyctures_run(write(tmp_path, GATED))
+    w = Watched(browser, server.url)
+    w.wait_running()
+    listen(w)
+    page = w.page
+    target = "%s.sound.synth('s1')" % SCENE
+    gate = page.evaluate("%s.describe('trance_gate')" % target)
+    assert gate["kind"] == "pattern" and gate["value"] == "x.x.xx.x" and gate["patterns"]["trance"] == "x.x.xx.xx.x.xx.x" and "named" not in gate, gate
+    arp = page.evaluate("%s.describe('arpPattern')" % target)
+    assert arp["value"] == "1 - 3 2" and arp["patterns"]["bounce"] == "1 2 3 2", arp
+    assert page.evaluate("[%s.get('trance_gate'), %s.get('arp_pattern'), %s.get('trance_gate_depth'), %s.get('trance_gate_rate')]" % ((target,) * 4)) == ["x.x.xx.x", "1 - 3 2", 0.9, 4]
+    assert page.evaluate("%s.sound.player.target('s1', %s.sound.scope).get('tranceGate')" % (SCENE, SCENE)) == "x.x.xx.x", "the player has it"
+    # The steps move, in the page and in Python.
+    seen, told = set(), set()
+
+    def moving():
+        seen.add(page.evaluate("%s.get('tranceGateStep')" % target))
+        state = page.evaluate("window.pyState") or [0, 0, -1, -1, 0]
+        told.add((state[2], state[3]))
+        return len(seen - {-1}) >= 3 and len({a for a, b in told} - {-1}) >= 3 and len({b for a, b in told} - {-1}) >= 2
+    wait_for(page, moving, "the gate's and the arpeggio's steps to move, in the page and in Python", 20)
+    assert max(seen) <= 7 and max(b for a, b in told) <= 3, (seen, told)
+    assert page.evaluate("window.pyState")[:2] == ["x.x.xx.x", "1 - 3 2"] and page.evaluate("window.pyState")[4] == 0.9
+    # A control sets a pattern by name, and takes the gate away: the page's object and the player follow.
+    page.evaluate("%s.set('trance_gate', 'pump')" % target)
+    assert page.evaluate("%s.describe('trance_gate')" % target)["named"] == "pump"
+    page.evaluate("%s.set('tranceGate', 'off')" % target)
+    assert page.evaluate("[%s.get('trance_gate'), %s.get('trance_gate_depth')]" % (target, target)) == ["", 0]
+    wait_for(page, lambda: page.evaluate("%s.sound.player.target('s1', %s.sound.scope).get('tranceGate')" % (SCENE, SCENE)) == "", "the player to drop the gate")
+    assert not w.errors, w.errors
+
+
 BUFFER = "from pyctures import *" + TUNE + '''
 set_sound_buffer("large")
 

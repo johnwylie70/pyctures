@@ -203,6 +203,57 @@ chord.stop()
 
 A chord has room for eight notes. Every synth has `arp` and `start_arp`; with no synth (`play_arp`, `start_arp`) they play on a chip sound. The length after the chord is how long the arpeggio sounds, as for any note (half a second unless you say), and it takes `volume`, `pan`, `after`, `at` and `beat` like any note; `chord.change("F", after=2)` changes it later. A struck arpeggio is ordinary notes, so it goes through the synth's envelope and filter at every step, and plays the right recordings of an instrument from `load_samples`. The tempo an arpeggio in steps keeps is the page's: where several scenes share a page, it is the tempo that was set last. [Arpeggio Chords](../examples/arpeggio_chords.py) is the fast kind, with a tune over it.
 
+A synth can have a pattern of its own, which every arpeggio of it follows unless it says another: `lead.arp_pattern = "trance"` (or the steps, or a list of them such as `[1, 0, 3, 2]`, where 0 is a rest). It reads back as its text, `"1^ - 3 2 - 1^ 3 -"`, and `lead.arp_pattern = "off"` takes it away. `lead.arp_step()` is the step that is sounding, counted from 0, for drawing it.
+
+For a sequencer of your own that looks ahead: `sound_time()` is the sound's clock in seconds, and `lead.play("C4", at=sound_time() + 0.25)`, `lead.note_on("C4", 0.8, at=when)` and `lead.note_off("C4", at=when)` happen on the exact sample of that time.
+
+### Bending a note
+
+A note's pitch can move, on any synth and on a sample:
+
+```py
+lead.play("A4", 1, bend="scoop")                  # up into the note from just below, as a singer starts one
+lead.play("C5", 1, glide="sixteenth")             # slides to C5 from the note this synth played last
+lead.play("E5", 2, vibrato=True)                  # begins straight, then starts to sing
+lead.play("A3", 1, bend="fall")                   # droops away at its end
+lead.play("C4", 1, slide=12)                      # an octave up, at once: a laser
+```
+
+| | |
+|---|---|
+| `glide` | the note starts at the pitch of the synth's last note and slides to its own: `True` (a sixteenth), a note length, or seconds |
+| `bend` | `"scoop"` (from 2 semitones below, over a sixteenth), `"fall"` (5 down over an eighth, ending with the note), `"dip"` (a semitone down and back), or `{"to": 2, "over": "eighth"}`: how far in semitones, or to a note by name, and how long. `{"shape": "scoop", "to": -5}` is a scoop of another size |
+| `slide` | a bend by a number of semitones over a sixteenth, or `{"to": ..., "over": ...}` |
+| `vibrato` | `True`, or `{"depth": 0.3, "rate": 6, "delay": "eighth"}`: semitones each way, times a second, and how long the note sounds first |
+
+They are for one note at a time (a chord's notes would all be moved to one pitch), in `play`, `start` and `play_note`; a tune from `play_notes` does not take them. A note that is held can be moved as it sounds: `held = lead.start("C4")`, then `held.slide_to("E4", 0.2)`, `held.vibrato()` and `held.vibrato(False)`.
+
+## The trance gate
+
+A trance gate turns a synth's sound up and down in a pattern of steps, in time with the tempo, so a held chord becomes a rhythm. It chops whatever the synth is playing.
+
+```py
+set_tempo(138)
+pad = make_synth("pad", echo=0.3)
+pad.trance_gate = "x.x.xx.x"                # x is open, . is closed; a step is a sixteenth
+pad.start(["A3", "C4", "E4"])
+```
+
+`pad.trance_gate = "trance"` is a pattern by name: `eighths`, `offbeat`, `gallop`, `trance`, `stutter`, `pump`, `triplets` (with `trance_gate_rate` 6) and `dotted`. A digit from `0` to `9` in a pattern is a step part of the way open, so `"2468"` swells; a list of levels from 0 to 1 is a pattern too. It reads back as the pattern's text, and `pad.trance_gate = "off"` takes it away.
+
+Its settings, each one a dial can be tied to:
+
+| | |
+|---|---|
+| `trance_gate_rate` | steps to a beat: 4 is sixteenths, 2 eighths, 3 and 6 triplets |
+| `trance_gate_depth` | how far a closed step closes: 1 is silence, 0.5 is half. Giving a pattern makes it 1 |
+| `trance_gate_smooth` | seconds from one level to the next; longer is softer |
+| `trance_gate_swing` | every second step that much of a step late |
+| `trance_gate_stereo` | left and right by turns |
+| `trance_gate_sends` | `False`: the echo and the reverb are fed the sound before it is chopped |
+
+`pad.set_trance_gate("x.x.xx.x", rate="eighth", depth=0.8, smooth=0.02)` says a pattern and its settings in one line, with the rate as a note length. The steps begin at `set_tempo`: call it where the bar begins and the gate is on the beat. `pad.trance_gate_step()` is the step that is sounding, for drawing it. (The word `gate` alone is something else twice over: an arpeggio's `gate` is how long each of its notes is held, and the microphone's `mic.gate` is its noise gate.)
+
 ## Samples
 
 A sample is a recorded sound in a file beside the scene: a `.wav`, or anything else a browser can read (`.mp3`, `.ogg`).
@@ -304,6 +355,18 @@ song.solo(0)                          # hear only the channels that are soloed. 
 song.loop_pattern()                   # stay on the pattern that is playing. song.loop_pattern(False) carries on
 song.seek(2)                          # jump to the third part of the song (and seek(2, 16): its row 16)
 ```
+
+**The mix.** Each channel has a place in the song's mix that can be moved while it plays, and the changes glide, so a fader can be dragged:
+
+```py
+song.channel(0).volume = 0.6               # its fader, 0 to 2
+song.channel(0).pan = -0.5                 # -1 is left, 1 is right
+song.channel(0).reverb = 0.4               # how much of it goes to the reverb, 0 to 1
+song.channel(0).echo = 0.3                 # and to the echo
+song.loop([1, 0], [5, 0])                  # go round from the top of place 1 in the order to the top of place 5; song.loop(None) runs on
+```
+
+`volume` and `pan` reach a channel whatever plays on it. `reverb` and `echo` reach a channel's sampled instruments; a synth instrument has the sends of its own synth (`reverb` and `echo` in its patch). Each reads back what was last set here. The reverb and the echo are the ones every synth shares, so `set_effects(reverb_type="hall", reverb_level=0.8, echo_time=0.3, echo_level=0.7)` shapes them; `reverb_level` and `echo_level` are how loud each comes back, for everything sent to it.
 
 `song.position` says where the song is, for drawing it: `{"state", "order", "pattern", "row", "tick", "speed", "tempo", "rounds", "rows", "orders"}`, where `state` is `"playing"`, `"paused"`, `"stopped"` or `"none"`. It is [a frame late](#drawing-the-sound-yourself), and `"none"` the first time it is read. `song.replace(edited)` puts an edited song in the place of the one playing: its bytes, its JSON as text, or the song as a dictionary.
 

@@ -12,6 +12,7 @@ These pages are adapted from the Pyctures help in [Circuitry Studio](https://www
 
 - [Getting started](getting-started.md): install, your first scene, `pyctures run` and `pyctures build`
 - [How a program is shaped](program-shape.md): draw once, draw every frame, loops, input, reading values back
+- [Scenes](scenes.md): a title screen and a game, parts on a timer, transitions between them
 - [Drawing in 2D](drawing-2d.md)
 - [3D scenes](3d.md)
 - [Colours](colours.md)

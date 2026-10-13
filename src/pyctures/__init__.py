@@ -36,6 +36,11 @@ Command shape (the contract with ``web/pyctures.js``). Every command is
 
 Values: plain JSON, or {"$h": h}, {"$e": expr}, {"$cb": id}, {"$d": {...}}.
 
+SCENES. A file may be several scenes (``class Title(Scene)``, ``go("game")``). That
+is a library too, ``pyscenes``, in ``web/scenes``, but one a file does not import:
+a file that names a scene is given its names (see ``_USES_SCENES``), and no other
+file loads it. Its page half is the fixed handle H_SCENES.
+
 SOUND AND DIALS are libraries of their own, ``synths`` and ``pydials``, which a
 scene imports. Each records its commands here as drawing does, against a fixed
 handle (H_SOUND, H_DIALS), so they ride the frame's message: a frame's sounds
@@ -45,7 +50,7 @@ The host calls ``start(source, info_json)`` once, then ``tick(payload_json)``
 once per frame, and ``stop()``. Each returns a JSON reply:
 ``{"cmds", "out", "err", "running", "error", "errorLine"}``.
 """
-import sys, io, os, json, time, math, traceback, threading, types, linecache
+import sys, io, os, re, json, time, math, traceback, threading, types, linecache
 
 __version__ = "0.2.0"
 
@@ -59,6 +64,7 @@ H_SAVED = 8  # the page's keeper of saved values
 H_FILES = 9  # the page's keeper of files and databases
 H_SOUND = 10     # the page's sound: `from synths import *` sends it a frame's sounds as one command, send(batch)
 H_DIALS = 11     # the page's dials, sliders and piano keys: `from pydials import *` makes each with one command
+
 
 
 class _State:
@@ -85,6 +91,8 @@ class _State:
         self.files_dir = ""      # where the page put this scene's stored files (a browser); "" is the scene's folder
         self.databases = []      # every database that is open
         self.ending = []         # functions called as a frame is sent (a library that sends once a frame, as synths does)
+        self.scenes = None       # what the library pyscenes keeps for this run, for a file that names a scene
+        self.stage = None        # its director, once the file has defined a scene: each frame tests this and no more
 
 
 # WHICH RUN A THREAD IS WORKING FOR. A host may run every frame as its own
@@ -542,6 +550,8 @@ def _handle(name, *args):
     """Call the scene's function `name`, if it has one, with as many of `args` as it takes:
     on_key_down(key) and on_key_down(key, code) are both right."""
     fn = S.ns.get(name)
+    if S.stage is not None:
+        return S.stage.handle(name, fn, args)   # a file with scenes: its own function, then the current scene's
     if not callable(fn):
         return
     code = getattr(fn, "__code__", None)
@@ -1666,7 +1676,8 @@ def _format_error(e):
             lines.append("    " + e.text.strip())
         lines.append("%s: %s" % (type(e).__name__, e.msg))
         return "\n".join(lines), line
-    lines.append("%s: %s" % (type(e).__name__, e))
+    where = getattr(e, "pyctures_scene", None)
+    lines.append("%s%s: %s" % ("In the scene %s: " % where if where else "", type(e).__name__, e))
     return "\n".join(lines), line
 
 
@@ -1681,7 +1692,7 @@ def _reply(error=None, error_line=0):
     S.out = io.StringIO()
     S.err = io.StringIO()
     running = S.ns is not None and not error and (
-        bool(S.tasks) or bool(S.callbacks)
+        bool(S.tasks) or bool(S.callbacks) or S.stage is not None
         or any(callable(S.ns.get(n)) for n in _LIVE_NAMES))
     reply = {
         "cmds": cmds, "out": out, "err": err, "running": running,
@@ -1723,6 +1734,10 @@ def _apply_events(p):
                     if _drive(task):
                         S.tasks.append(task)
             continue
+        if kind == "scene":
+            if S.stage is not None:
+                S.stage.told(e)
+            continue
         _input(e)
 
 
@@ -1750,6 +1765,9 @@ def _step_tasks(answers):
 
 def _call_frame_functions(dt):
     ns = S.ns
+    stage = S.stage
+    if stage is not None:
+        stage.step(dt)
     for name, args in (("update", (dt,)), ("draw", ())):
         fn = ns.get(name)
         if not callable(fn):
@@ -1765,6 +1783,27 @@ def _call_frame_functions(dt):
             task = [r, None, name]
             if _drive(task):
                 S.tasks.append(task)
+    if stage is not None:
+        stage.frame(dt)
+
+
+# SCENES are the library pyscenes (web/scenes/pyscenes.py), brought in only for a file that names one: a class
+# with Scene in its brackets, or a call of scene(), go() or next_scene(). The page and `pyctures build` ask the
+# same question of the same text with the same words (pyctures.js LIBRARIES, pages.uses_library).
+_USES_SCENES = re.compile(r"(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene)[ \t]*\()", re.M)
+
+
+def _scenes_library():
+    try:
+        import pyscenes
+    except ImportError:
+        # Beside this file, where nothing has put it on the path (the tests, a host of its own).
+        folder = os.path.join(os.path.dirname(os.path.abspath(globals().get("__file__") or "")), "web", "scenes")
+        if not os.path.isfile(os.path.join(folder, "pyscenes.py")):
+            raise
+        sys.path.append(folder)
+        import pyscenes
+    return pyscenes
 
 
 _MIDI_NAMES = ("on_midi", "on_midi_note", "on_midi_note_off", "on_midi_control", "on_midi_devices")
@@ -1811,6 +1850,11 @@ def start(source, info_json):
         ns[name] = globals()[name]
     S.ns = ns
     _apply_info(info)
+    if _USES_SCENES.search(source):
+        try:
+            _scenes_library().begin_run(ns, info)
+        except ImportError:
+            pass   # a page that did not bring the library: the file's own mention of a scene is then a name that is not there
     old_out, old_err = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = S.out, S.err
     tracer = _Traced()
@@ -1833,6 +1877,8 @@ def start(source, info_json):
                 if _drive(task):
                     S.tasks.append(task)
         _midi_hooks(ns)
+        if S.scenes is not None:
+            S.scenes.begin(ns)
         _call_frame_functions(0.0)
     except BaseException as e:  # noqa: BLE001 — every failure is the user's to read
         msg, line = _format_error(e)

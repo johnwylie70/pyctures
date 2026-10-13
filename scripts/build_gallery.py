@@ -40,6 +40,8 @@ SCENES = [
     ("snake.py", "Snake", "A game on a grid: eat the apples and grow. Your best score is kept.", "Arrow keys, or tap the side to turn to."),
     ("high_score.py", "High Score", "Catch the star as often as you can in 10 seconds. The best score is still there next time: save() and load().", "Click or tap the star."),
     ("top_scores.py", "Top Scores", "Every game is written into a database, and the best five are shown: open_database().", "Click or tap the star."),
+    ("three_screens.py", "Three Screens", "A title screen, the game and a game-over screen: three scenes, with a transition between them.", "Click to start, then move the mouse or drag a finger."),
+    ("three_parts.py", "Three Parts", "Three scenes on a timer, one after another, with a scrubber that has a tick where each starts.", "Move the pointer over it for the scrubber."),
     ("cube_spiral.py", "Cube Spiral", "400 cubes in a rainbow spiral, turning.", "Drag to look around."),
     ("cube_dodge.py", "Cube Dodge", "A 3D game with shadows, fog and the keyboard.", "Arrow keys or drag. Dodge the red blocks."),
     ("bouncing_balls.py", "Bouncing Balls", "A 2D animation with trails and hsl() colours.", "Click or tap to add a ball."),

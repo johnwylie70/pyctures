@@ -341,7 +341,7 @@ export function inputOf(source) {
  * onApplied({reads, errors, ms, n, timing}), onReads(reads) (a promise has
  * settled), isActive() (has the keyboard).
  */
-export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, sound = null, dials = null, hooks }) {
+export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, sound = null, dials = null, scenes = null, hooks }) {
   const H = new Map()
   let ctx2d = null
   let dpr = 1, cssW = 0, cssH = 0
@@ -754,6 +754,20 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   if (sound) H.set(10, sound)
   const panel = dials ? dials(canvas) : null
   if (panel) H.set(11, panel)
+  // SCENES: a change of scene (see SCENES). `empty` is a scene starting with a clear canvas and the drawing settings as they start.
+  if (scenes) {
+    H.set(12, {
+      // (A 2D canvas can be read at any time, so a slide is drawn whole; a 3D one cannot, and is moved by a style.)
+      transition: (name, seconds, colour) => scenes.transition(name, seconds, colour, !!ctx2d && !isGL),
+      show: (...args) => scenes.show(...args),
+      empty() {
+        if (!ctx2d || isGL) return
+        if (typeof ctx2d.reset === 'function') ctx2d.reset()
+        else canvas.width = canvas.width
+        ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0)
+      },
+    })
+  }
   window.addEventListener('keydown', sendInput)
   window.addEventListener('keyup', sendInput)
   window.addEventListener('blur', sendInput)
@@ -833,10 +847,19 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
 // ---------------------------------------------------------------- sound and dials
 
 /** A command that does nothing: what a frame's sounds leave in their place once they have been sent on. */
+// ---------------------------------------------------------------- scenes
+//
+// SCENES: a Python file in several scenes (`class Title(Scene)`, `go("game")`). It is a library, loaded only
+// for a file that names a scene (LIBRARIES, `pyscenes`): the page's half is scenes/scenes.js, which runs each
+// transition on a layer over the canvas and shows the scrubber, as the fixed handle 12. A page with it says
+// so in the start info (`scenes`), and Python sends nothing to a page without. See scenes/scenes.js.
+
 const NOTHING_TO_DO = ['free', 0, 0]
 
 /** Does the scene import a library (`from synths import *`, `import pydials`)? Python's pages.uses_library makes the same test. */
 export function usesLibrary(source, name) {
+  const lib = LIBRARIES[name]
+  if (lib && lib.uses) return lib.uses.test(source || '')
   return new RegExp('^[ \\t]*(?:from|import)[ \\t]+' + name + '\\b', 'm').test(source || '')
 }
 
@@ -847,6 +870,9 @@ export function usesLibrary(source, name) {
 export const LIBRARIES = {
   synths: { folder: 'synths', js: 'synths.js', py: 'synths.py' },
   pydials: { folder: 'dials', js: 'dials.js', py: 'pydials.py' },
+  // Scenes are not imported: a file that names one (a class with Scene in its brackets, or a call of scene(), go()
+  // or next_scene()) is given them. Python asks the same of the same text (_USES_SCENES), and so does `pyctures build`.
+  pyscenes: { folder: 'scenes', js: 'scenes.js', py: 'pyscenes.py', uses: /(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene)[ \t]*\()/m },
 }
 
 const libraries = {}
@@ -1825,6 +1851,11 @@ let activeScene = null
  *   background  the colour behind the canvas
  *   autoStart   false: wait for scene.start()
  *   makeTransport  a function that makes a fresh transport for each run
+ *   controls    false: no scrubber for a program of timed scenes (see scenes/scenes.js)
+ *   transitions more transitions between scenes, by name (scenes/scenes.js, "MORE TRANSITIONS")
+ *   scenes      the page's half of scenes, for a host that has it already: the module scenes.js, a promise of it, or its address
+ * While a file with scenes runs, `scene.stage` is the page's half of them: `name`, `sections`, `duration`,
+ * `time`, and `running`, the transition going on now or null (`{ name, seconds, progress, from, to, hold(progress), release() }`).
  *   storage     where the scene's files and databases are kept, from a host (see sceneFiles)
  *   sound       how the scene's sound is played, from a host (see soundKeeper)
  *   microphone  a host's own microphone (a stream, pushed frames, or false), and `save`, where save_sound's files go
@@ -1983,7 +2014,7 @@ export class Scene {
         if (!usesLibrary(source, name)) continue
         // A host that plays the sound itself needs synths.js here only for what a dial asks of a synth.
         if (name === 'synths' && typeof host.send === 'function' && !host.synths && !usesLibrary(source, 'pydials')) continue
-        try { libs[name] = await loadLibrary(name, name === 'synths' ? host.synths : this.opt.dials) } catch (e) { this.log('err', `${name} could not load: ${(e && e.message) || e}`) }
+        try { libs[name] = await loadLibrary(name, name === 'synths' ? host.synths : name === 'pydials' ? this.opt.dials : this.opt.scenes) } catch (e) { this.log('err', `${name} could not load: ${(e && e.message) || e}`) }
       }
       // Everything the scene has stored, to put in Python's file system before it starts.
       const stored = this.transport.keepsFiles ? await this.files.all() : []
@@ -2005,8 +2036,16 @@ export class Scene {
         microphone: this.opt.microphone, save: this.opt.save, files: this.files,
         onState: (state) => { if (token === r.token && (state === 'waiting' || (this.coverEl && waiting.includes(this.coverEl.textContent)))) this.cover(state === 'waiting' ? waiting[this.sound && this.sound.microphone ? 1 : 0] : '') },
       })
+      // Scenes, for a file that names one: the page's half runs the transitions and shows the scrubber.
+      this.stage = libs.pyscenes ? libs.pyscenes.scenesKeeper(this.el, this.canvas, {
+        more: this.opt.transitions, bar: this.opt.controls !== false,
+        tell: (e) => { if (r.live && token === r.token) r.events.push({ k: 'scene', e }) },
+        // The scrubber's pause is the sound's too; playing again leaves a scene that is out of view silent.
+        paused: (on) => { if (!this.sound) return; if (on) this.sound.pause(); else this.hush() },
+      }) : null
       this.renderer = createRenderer(this.canvas, {
         sound: this.sound,
+        scenes: this.stage,
         dials: dialsKeeper({ given: this.opt.dials, module: libs.pydials }),
         three: three && three.three,
         addons: three && three.addons,
@@ -2029,7 +2068,7 @@ export class Scene {
       r.busy = true
       r.busySince = performance.now()
       this.setStatus('running')
-      const text = await this.transport.start(source, { ...r.size, measure: r.measuring, saved: this.saved.all() }, stored)
+      const text = await this.transport.start(source, { ...r.size, measure: r.measuring, saved: this.saved.all(), ...(this.stage ? { scenes: { transitions: this.stage.names() } } : {}) }, stored)
       r.busy = false
       if (r.warnedStuck) this.unstuck()
       if (token !== r.token) return
@@ -2061,6 +2100,7 @@ export class Scene {
     if (this.status === 'running' || this.status === 'starting') this.setStatus('stopped')
     if (this.renderer) { this.renderer.destroy(); this.renderer = null }
     if (this.sound) { this.sound.close(); this.sound = null }
+    if (this.stage) { this.stage.close(); this.stage = null }
     if (this.transport) {
       // Python in the middle of a frame cannot be asked to stop: a worker is
       // ended instead (and started afresh on the next run).
@@ -2259,6 +2299,8 @@ export class Scene {
     }
     const gap = r.lastRaf ? now - r.lastRaf : 0
     r.lastRaf = now
+    // A transition and the scrubber move on the page's clock, whatever Python is doing.
+    if (this.stage) this.stage.step(Math.min(0.1, gap / 1000))
     if (r.measuring) this.measureTick(now, gap)
     if (r.busy) {
       r.missedRefresh = true

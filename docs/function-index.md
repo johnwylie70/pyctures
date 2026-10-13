@@ -10,6 +10,7 @@ Every name a Pyctures program can use, by area, one line each. The link on each 
 | Sprites and hit-testing | yes | yes |
 | Keyboard, mouse and touch | yes | yes |
 | Frames and timing | yes | yes |
+| Scenes | yes | yes |
 | Saved values | yes | yes |
 | Files | yes | yes |
 | Databases (SQLite) | yes | yes |
@@ -32,6 +33,29 @@ Explained in [How a program is shaped](program-shape.md#2-draw-every-frame-draw-
 | `setup()` | Called once, before the first frame |
 | `update(dt)` | Called every frame, with the seconds since the last one: move things here |
 | `draw()` | Called every frame, after `update`: draw the picture here |
+
+## Scenes
+
+A program in several scenes, each with the functions above as its own.
+
+Explained in [Scenes](scenes.md).
+
+| Name | What it does |
+|---|---|
+| `class Title(Scene):` | A scene: `setup`, `update`, `draw` and the `on_` functions as its methods, its variables on `self`. Every `Scene` class plays, in the order written |
+| `scene(name, draw=..., update=...)` | A scene from plain functions, with no class |
+| `go(scene)` | Change to a scene, by its name or its class. `go("Game", transition="wipe", transition_time=0.5)` says how; `keep=True` goes back to a scene as it was left |
+| `next_scene()` | Change to the next scene written; after the last comes the first |
+| `restart()` | Begin this scene again, from empty |
+| `length`, `beats`, `bars` | On a scene: it ends by itself after so many seconds, beats or bars |
+| `transition`, `transition_time`, `transition_color` | On a scene: how it arrives. `"cut"`, `"crossfade"`, `"fade"`, `"wipe"`, `"wipe_left"`, `"wipe_up"`, `"wipe_down"`, `"slide_left"`, `"slide_right"`, `"slide_up"`, `"slide_down"` |
+| `resume(self)`, `on_stop(self)` | A scene's own: `resume` is called in place of `setup` when it is come back to with `keep=True`, and `on_stop` when it ends |
+| `scene_time` | Seconds since this scene began |
+| `scene_progress` | How far through its length the scene is, from 0 to 1 |
+| `scene_name` | The name of the scene on show |
+| `section(name)` | A tick on the scrubber at this moment |
+| `config(loop=..., transition=...)` | Settings for every scene: `loop`, `transition`, `transition_time`, `transition_color`, `beats_per_bar` |
+| `on_seek(seconds)` | A function you write at the top level: called when the scrubber is moved |
 
 ## 2D drawing: the plain functions
 

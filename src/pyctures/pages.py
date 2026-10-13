@@ -28,6 +28,9 @@ ASSETS = {
     "dials/dials.js": WEB / "dials" / "dials.js",
     "dials/pydials.py": WEB / "dials" / "pydials.py",
     "dials/LICENSE": WEB / "dials" / "LICENSE",
+    # Scenes (`class Title(Scene)`): Pyctures' own, loaded only for a file that names a scene.
+    "scenes/scenes.js": WEB / "scenes" / "scenes.js",
+    "scenes/pyscenes.py": WEB / "scenes" / "pyscenes.py",
 }
 
 # The libraries a scene asks for by importing them: the name it imports -> (its folder, the page's half,
@@ -35,11 +38,17 @@ ASSETS = {
 LIBRARIES = {
     "synths": ("synths", "synths.js", "synths.py"),
     "pydials": ("dials", "dials.js", "pydials.py"),
+    "pyscenes": ("scenes", "scenes.js", "pyscenes.py"),
 }
+
+# Scenes are not imported: a file that names one is given them (the same words as pyctures.js and the Python half).
+USES_SCENES = re.compile(r"(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene)[ \t]*\()", re.M)
 
 
 def uses_library(source, name):
     """Whether a scene imports a library (the same test the browser half makes)."""
+    if name == "pyscenes":
+        return USES_SCENES.search(source) is not None
     return re.search(r"^[ \t]*(?:from|import)[ \t]+%s\b" % name, source, re.M) is not None
 
 

@@ -29,6 +29,7 @@ These are ready in every file, with no import:
 | `save`, `load` | Keep a value for the next time the program runs: `save("best", 120)`, `load("best", 0)`. See [Saved values](saved-values.md). |
 | `save_text`, `load_text`, `save_json`, `load_json` | Write a file and read it back: `save_text("notes.txt", words)`, `load_json("level.json", {})`. See [Files and databases](files-and-databases.md). |
 | `open_database` | A SQLite database: `db = open_database("scores")`, then `db.query(...)` and `db.run(...)`. |
+| `Scene`, `scene`, `go`, `next_scene`, `restart`, `section`, `config` | A program in several scenes, such as a title screen and a game. See [Scenes](scenes.md). |
 | `Event` | The type of the event a callback receives. |
 | `js` | Everything else the page has, for when you need it. |
 
@@ -72,6 +73,8 @@ Moving by `speed * dt` keeps the speed the same on a fast device and a slow one.
 You can also define `setup()`. It is called once, after the top level has run and before the first frame. Code at the top level does the same job, so use whichever reads better.
 
 A program with `draw()` or `update()` keeps running until you press Stop.
+
+A file can also be several scenes, each with its own `setup`, `update`, `draw` and `on_` functions: a title screen, the game and a game-over screen, or parts that play one after another. See [Scenes](scenes.md).
 
 ## 3. A loop with `await frame()`
 

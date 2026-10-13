@@ -203,7 +203,7 @@ go("Game", transition="wipe", transition_time=0.5)
 
 During a transition the old scene is a still picture of its last frame. The new scene has already begun: its `setup()` has been called and its `update` and `draw` are running underneath. A transition starts and ends gently.
 
-**A transition is smooth however busy Python is.** Python only tells the page which transition to make. The page keeps the old scene's last picture and fades, wipes or slides it away itself, at the screen's own rate, while your new scene's frames arrive underneath.
+**A transition is smooth however busy Python is.** Python only tells the page which transition to make. The page keeps the old scene's last picture and fades, wipes or slides it away itself, at the screen's own rate, while your new scene's frames arrive underneath. A recording of the program has its transitions in it.
 
 The first scene of a program arrives with no transition. A 3D program has the same transitions.
 
@@ -235,7 +235,7 @@ def on_seek(seconds):
     song.seek(int(seconds / 8))    # in this song an order lasts 8 seconds
 ```
 
-A program with a scene that has no length has no scrubber: its length is not known. Pausing the scrubber stops the scenes, not the sound.
+A program with a scene that has no length has no scrubber: its length is not known. Pausing the scrubber pauses the sound too.
 
 ## Mistakes
 

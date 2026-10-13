@@ -217,7 +217,7 @@ def test_a_mistake_in_a_scenes_draw_names_the_scene():
 def test_scene_options_that_do_not_exist_say_so():
     r = start('class A(Scene):\n    pass\ngo("A", fade=True)\n')
     assert 'go("A") has no option "fade". It takes transition, transition_time, transition_color and keep' in r["error"]
-    r = start("config(speed=2)\n")
+    r = start("config(speed=2)\nclass A(Scene):\n    pass\n")
     assert 'config() has no setting "speed". It has: loop, transition, transition_time, transition_color, beats_per_bar' in r["error"]
 
 
@@ -396,6 +396,32 @@ def test_a_file_with_no_scenes_is_one_scene_as_before():
     assert start("ctx.fill_rect(0, 0, 1, 1)")["running"] is False
 
 
+# ---------------------------------------------------------------- what a file with no scenes costs
+
+def test_scenes_are_a_library_that_only_a_file_naming_a_scene_is_given(tmp_path):
+    from pyctures import build, pages
+    assert not pages.uses_library("world = THREE.Scene()\nship.go(3)\ndef draw():\n    pass\n", "pyscenes")
+    for names in ("class Title(Scene):\n    pass\n", 'scene("title", draw=d)\n', 'go("game")\n', "next_scene()\n"):
+        assert pages.uses_library(names, "pyscenes") and pyctures._USES_SCENES.search(names)
+    # The page asks the same question with the same words.
+    page_words = (pages.WEB / "pyctures.js").read_text(encoding="utf-8")
+    assert "uses: /%s/m" % pages.USES_SCENES.pattern in page_words
+    plain = tmp_path / "plain.py"
+    plain.write_text("def draw():\n    background('black')\n")
+    staged = tmp_path / "staged.py"
+    staged.write_text("class A(Scene):\n    def draw(self):\n        background('black')\n")
+    build.build(plain, tmp_path / "plain.html", say=lambda *a: None)
+    build.build(staged, tmp_path / "staged.html", say=lambda *a: None)
+    without, with_scenes = (tmp_path / "plain.html").read_text(), (tmp_path / "staged.html").read_text()
+    library = sum(len(pages.ASSETS[a].read_text(encoding="utf-8")) for a in ("scenes/scenes.js", "scenes/pyscenes.py"))
+    assert "scenesKeeper(container" not in without and "class _Stage" not in without and "pyctures-bar" not in without
+    assert "scenesKeeper(container" in with_scenes and "class _Stage" in with_scenes
+    # A page with no scenes is the size it was: all of scenes but the few lines that ask for it is in the library.
+    assert len(with_scenes) - len(without) > library and len(without) < 195_000
+    start("def draw():\n    ctx.fill_rect(0, 0, 1, 1)\n")
+    assert pyctures.S.scenes is None and "Scene" not in pyctures.S.ns
+
+
 # ================================================================ in a browser
 
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -503,6 +529,46 @@ def test_a_slide_moves_both_scenes_and_a_fade_goes_through_its_colour(browser, p
         [WHITE, WHITE, RED, RED, BLUE, BLUE]
     seen = change(browser, pyctures_run, tmp_path, 'transition="fade", transition_time=60, transition_color="rgb(0,255,0)"')
     assert near(seen[0](100, 100), RED, 1) and near(seen[0.25](100, 100), [128, 128, 0]) and near(seen[0.5](100, 100), [0, 255, 0], 1) and near(seen[1](100, 100), BLUE, 1)
+
+
+def test_a_recording_has_the_transition_and_a_page_with_no_scenes_asks_for_nothing_more(browser, pyctures_run, tmp_path):
+    # What a recorder does: every canvas of the scene drawn one over another. No canvas has a style to miss.
+    recorded = """() => {
+      const out = document.createElement('canvas'); out.width = 300; out.height = 200
+      const g = out.getContext('2d'), styled = []
+      for (const c of document.querySelectorAll('[data-pyctures-src] canvas')) {
+        g.drawImage(c, 0, 0, 300, 200)
+        styled.push([c.style.opacity, c.style.clipPath, c.style.transform].join(''))
+      }
+      const at = (x, y) => [...g.getImageData(x, y, 1, 1).data].slice(0, 3)
+      return [styled.join(''), at(100, 100), at(250, 100), at(50, 100), at(152, 100)]
+    }"""
+    got = {}
+    for kind in ("crossfade", "slide_left"):
+        w = run(browser, pyctures_run, tmp_path, PAIR % ('transition="%s", transition_time=60' % kind))
+        asked = []
+        w.page.on("request", lambda r: asked.append(r.url.split("/")[-1]))
+        w.page.wait_for_function(SCENE + ".stage.name === 'Red'")
+        w.page.keyboard.press("a")
+        w.page.wait_for_function(SCENE + ".stage.running && " + SCENE + ".stage.name === 'Blue'")
+        w.page.evaluate("%s.stage.running.hold(0.5)" % SCENE)
+        w.page.wait_for_timeout(150)
+        got[kind] = w.page.evaluate(recorded)
+        w.page.close()
+    styled, a, b, c, d = got["crossfade"]
+    assert styled == "" and near(a, [128, 0, 128]) and near(b, [128, 128, 255])
+    styled, a, b, c, d = got["slide_left"]
+    assert styled == "" and [a, c, d] == [WHITE, RED, BLUE]
+    # A file with no scenes is not given the library, by the page or by Python.
+    asked = []
+    file = tmp_path / "plain.py"
+    file.write_text("def draw():\n    background('black')\n")
+    page = browser.new_page()
+    page.on("request", lambda r: asked.append(r.url.split("/")[-1]))
+    page.goto(pyctures_run(file).url)
+    page.wait_for_function("document.querySelector('[data-pyctures-status=running]')")
+    assert page.evaluate(SCENE + ".stage") is None and "pyctures.js" in asked and "scenes.js" not in asked
+    page.close()
 
 
 def test_a_3d_files_scenes_change_with_the_same_transitions(browser, pyctures_run, tmp_path):

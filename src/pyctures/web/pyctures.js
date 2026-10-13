@@ -1101,6 +1101,12 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       if (c.voice != null) wear(c.id, c.voice)
       if (c.set) synths.get(c.id).set.push(...Object.entries(c.set))
       if (sampled(c.id) !== had) changed(c.id)
+    } else if (c.op === 'zones') {
+      // Several recordings as one instrument (load_samples): they are the sample its wave plays.
+      const had = sampled(c.id)
+      if (!synths.has(c.id)) synths.set(c.id, { preset: 'keys', set: [] })
+      synths.get(c.id).zones = !!c.zones
+      if (sampled(c.id) !== had) changed(c.id)
     } else if (c.op === 'mic') {
       // The microphone is a synth by its id, which starts with nothing set: it comes through untouched.
       if (c.do === 'close') { mics.delete(c.id); return }
@@ -1201,6 +1207,7 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   function hasSample(id, wave) {
     const mine = synths.get(id), holds = wave.replace('wave', 'sample')
     if (!table || !mine) return false
+    if (mine.zones && wave === WAVES[0]) return true
     return mine.set.some(([name, value]) => { const at = table.names.get(nameKey(name)); return !!at && at.entry.name === holds && value != null })
   }
   const sampled = (id) => WAVES.map((wave) => hasSample(id, wave)).join()

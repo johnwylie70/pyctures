@@ -533,6 +533,42 @@ def test_run_a_sample_is_sent_by_python(browser, pyctures_run, tmp_path):
     assert not w.errors, w.errors
 
 
+PIANO = '''
+from pyctures import *
+from synths import *
+from pydials import *
+
+piano = load_samples(["sounds/beep-C4.wav", "sounds/beep-C5.wav"], crossfade=2)
+rotary("wave", piano, "wave")
+piano.play_notes("C4 E4 G4 C5", 0.2, repeat=True)
+
+def update(dt):
+    js.pyState = [piano.wave, len(piano.zones())]
+'''
+
+
+def test_several_recordings_are_one_instrument_that_is_heard(browser, pyctures_run, tmp_path):
+    """load_samples: Python sends the files and the zones, the page's player makes the map, and it sounds. A control
+    on its wave offers "sample", which it is on."""
+    (tmp_path / "sounds").mkdir()
+    for name in ("beep-C4.wav", "beep-C5.wav"):
+        beep(tmp_path / "sounds" / name)
+    server = pyctures_run(write(tmp_path, PIANO))
+    w = Watched(browser, server.url)
+    asked = requests_of(w.page)
+    w.wait_running()
+    listen(w)
+    page = w.page
+    assert page.evaluate("window.pyState") == ["sample", 2]
+    zones = page.evaluate("%s.sound.player.target('s1', %s.sound.scope).get('zones')" % (SCENE, SCENE))
+    assert [(z["file"], z["note"]) for z in zones] == [("sounds/beep-C4.wav", 60), ("sounds/beep-C5.wav", 72)], zones
+    assert zones[0]["to"] + 1 >= zones[1]["from"], "the keys are shared out between the two"
+    made = page.evaluate(CHOSEN)
+    assert made["wave"]["choices"][-1] == "sample" and made["wave"]["on"] == "sample", made
+    assert not [u for u in asked if u.endswith(".wav")], "Python had the files, and sent them"
+    assert not w.errors, w.errors
+
+
 BUFFER = "from pyctures import *" + TUNE + '''
 set_sound_buffer("large")
 

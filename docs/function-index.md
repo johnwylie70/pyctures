@@ -13,6 +13,8 @@ Every name a Pyctures program can use, by area, one line each. The link on each 
 | Saved values | yes | yes |
 | Files | yes | yes |
 | Databases (SQLite) | yes | yes |
+| Sound and music | with synths.js | yes, `from synths import *` |
+| Dials and a keyboard | with dials.js | yes, `from pydials import *` |
 | Image processing | Circuitry only | Circuitry only |
 
 This page is Pyctures's own index, in its own spellings. pictures.js has the same areas in JavaScript: [the pictures.js function index](https://www.circuitry.dev/docs/pictures/functions).
@@ -574,6 +576,38 @@ Explained in [Files and databases](files-and-databases.md#databases).
 | `db.query(sql, values...)` | Asks a question | `db.query` |
 | `db.run(sql, values...)` | Makes a change: `create table`, `insert`, `update`, `delete` | `db.run` |
 | `db.close()` | Finishes with the database | `db.close` |
+
+## Sound and music
+
+These come with `from synths import *` at the top of the scene. Explained in [Sound and music](sound.md).
+
+| Name | What it does |
+|---|---|
+| `play_sound(name)` | A ready-made game sound: `coin`, `jump`, `laser`, `explosion` and ten more |
+| `play_note(note, length, volume)` | A note, or a chord |
+| `play_notes(notes, step)` | A tune; `repeat=True` goes round until `.stop()` |
+| `make_synth(name, ...)` | A synth of your own: `.play`, `.start`, `.stop`, `.play_notes`, `.arp`, and its settings as attributes |
+| `load_sample(path)` | A recorded sound from a file, as a synth |
+| `play_arp(chord)`, `start_arp(chord)` | A chord from one voice, as a fast arpeggio |
+| `chord_notes(name)`, `note_number(note)` | The notes of a chord, and a note as a number |
+| `set_effects(...)` | The echo, reverb and chorus every synth shares |
+| `set_tempo(bpm)`, `beats(n)`, `beat()`, `sound_time()` | The beat, and the sound clock |
+| `set_volume(v)`, `mute_sound()`, `unmute_sound()`, `stop_sound()` | All the sound |
+| `main_synth()`, `sound_output()` | The synth `play_note` uses, and all the sound together, for dials and scopes |
+| `sound_names()`, `synth_names()`, `setting_names()` | What there is |
+| `play_song(path)` | A tracker song: not ready yet |
+
+## Dials and a keyboard
+
+These come with `from pydials import *` at the top of the scene. Explained in [Dials and a keyboard](dials.md).
+
+| Name | What it does |
+|---|---|
+| `dial(label, min, max, start)`, `slider(...)` | A number to turn or slide; or a setting of a synth: `dial("cutoff", lead, "cutoff")` |
+| `button(label)`, `toggle(label)`, `select(label, choices)` | A button, a switch, and one of a list |
+| `keyboard(target, octave=4)` | A piano keyboard that plays a synth |
+| `scope(source)`, `meter(source)` | A wave, or any value over time; a level |
+| `label(text)`, `row()`, `layout(...)`, `theme(...)` | Words, a new row, where the rows go, the colours |
 
 ## Other names
 

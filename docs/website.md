@@ -87,7 +87,7 @@ const scene = mount(document.querySelector("#game"), { src: "game.py" })
 await scene.destroy()
 ```
 
-The second argument takes `src`, `files` (a list of paths), `background`, `output` and `fullPage`, as the attributes do, and one setting that has no attribute: `storage`, below.
+The second argument takes `src`, `files` (a list of paths), `background`, `output` and `fullPage`, as the attributes do, and settings that have no attribute: `storage` and `sound`, below.
 
 Set `window.PYCTURES_NO_AUTO = true` before the script loads to stop it starting every `[data-pyctures-src]` by itself, and `window.PYCTURES_PYODIDE_URL` to load Pyodide from somewhere other than its official CDN (your own copy, for example).
 
@@ -119,6 +119,33 @@ mount(el, {
 - **Every stored file is read before the scene starts.** Python cannot wait for an answer in the middle of a frame, so the page asks `list()` for the paths, reads each one (`readBytes` first, then `readText` if that gave `null`), and hands them all to Python. So `list()` should give only that scene's files, and they should be small enough to read each time it starts. Without `list()`, the page notes the paths it has written through your functions (in `localStorage`) and reads those.
 - **Writes arrive in order,** each as the scene makes it: a text file when it is saved, a database at most once a frame, when a frame changed it. A write that fails is reported once in the console and the scene carries on.
 - **With `pyctures run` none of this is used:** the files are real ones beside the scene.
+
+### Sound
+
+A scene that makes sound ([Sound and music](sound.md)) plays it on the page it is on, and you need do nothing: the first time a scene asks for a sound the page loads the sound engine from the `synths/` folder beside `pyctures.js` (`synths.js`, `synths_core.wasm` and `synths-worklet.js`), and the engine runs on the browser's audio thread. A scene with dials loads `dials/dials.js` in the same way. A scene with neither loads neither.
+
+An app that shows scenes can take the sound over with `sound`, an object with any of these:
+
+```js
+mount(el, {
+  src: "game.py",
+  sound: {
+    send(batch) { port.postMessage(batch) },   // take the commands and play them somewhere else
+    read(id) { return latest.get(id) },        // with send: what a synth is doing, for scopes and meters
+    synths: import("./synths/synths.js"),      // synths.js itself: the module, a promise of it, or its address
+    wasm: engineBytes,                         // the engine's bytes, for a page that may not fetch them
+    worklet: "blob",                           // how the audio worklet is loaded: "blob", "file" or an address
+    latency: 0.06,                             // seconds everything is played ahead
+    onState(state) {},                         // "waiting" (for a tap), "on" or "failed"
+  },
+})
+```
+
+- **`send(batch)`** is handed every batch of commands, `{ synths: 1, now, cmds }`, in the format of synths.js ([its docs/commands.md](https://github.com/johnwylie70/synths.js/blob/main/docs/commands.md)). With it nothing is played here and no engine is loaded: play the batches with `createPlayer()` from synths.js wherever sound may be made (`player.send(batch)`), or with an engine of your own. When the scene stops you are sent `{ op: "stop" }`.
+- **One clock.** Every time in a batch is on the page's clock, `performance.now() / 1000`, whether the command came from Python (whose own clock may be another computer's) or from a key or a dial on the page. `now` is that clock when the batch was handed over.
+- **`read(id)`** gives `{ samples, level: [left, right], notes }` for one synth, or for all the sound when there is no id, as `player.read(id)` does. Without it scopes and meters stay flat.
+- **Without `send`** the page plays the sound itself, and `synths`, `wasm` and `worklet` say where its parts come from, so a page that may fetch nothing (a sandboxed frame) still has sound. They are `createPlayer`'s options. `dials`, beside `sound`, is `dials.js` in the same way: the module, a promise of it, or its address.
+- **No `eval` is needed**, for sound or for dials. A page's policy has to allow `'wasm-unsafe-eval'` (the engine is WebAssembly) and, for the worklet from a Blob, `blob:` in `script-src`; `worklet: "file"` loads `synths-worklet.js` by its address instead.
 
 ## Try the example
 

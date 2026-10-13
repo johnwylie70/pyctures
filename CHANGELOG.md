@@ -1,5 +1,15 @@
 # Changes
 
+## Unreleased
+
+- **Sound**: `from synths import *` at the top of a scene gives it `play_sound("coin")`, `play_note("C4")`, `play_notes("C4 E4 G4 - C5", 0.25)`, `make_synth("lead")` with its settings as attributes, arpeggios, samples from a file and effects. It is the library [synths](https://github.com/johnwylie70/synths-py), which comes with Pyctures; the sound is made by its engine on the browser's audio thread. A browser is silent until the page has been touched, and the scene says so until it has been. See `docs/sound.md`.
+- **Dials and a keyboard**: `from pydials import *` gives a scene `dial`, `slider`, `button`, `toggle`, `select`, `keyboard`, `scope` and `meter`. A dial can be a number for the scene (`speed = dial("speed", 0, 10)`) or a setting of a synth (`dial("cutoff", lead, "cutoff")`), and a keyboard plays one. Keys and dials act on the synth in the page, so they are heard at once however busy Python is. It is the library [pydials](https://github.com/johnwylie70/pydials), which also comes with Pyctures. See `docs/dials.md`.
+- Both work the same with `pyctures run`, in a built folder and in a single `.html` file, and need no `eval`. A page loads them only for a scene that imports them: a scene without sound or dials loads exactly what it did before.
+- `pyctures build` takes along the sound files a scene names (`load_sample("sounds/kick.wav")`), as it does images.
+- **`sound`**, for an app that shows scenes: `mount(el, { src, sound })` takes an object with any of `send` (take the commands and play them elsewhere), `read`, `synths`, `wasm`, `worklet`, `latency` and `onState`. `dials` gives the page its `dials.js`. See `docs/website.md`.
+- Four new examples: Sound Catcher, Tune, Arpeggio Chords and Synth Panel.
+- `scripts/sync_libraries.py` copies the two libraries into `src/pyctures/web/synths` and `src/pyctures/web/dials` from the repositories where they are written.
+
 ## 0.2.0 (2026-10-11)
 
 Everything written for 0.1.0 still runs. This release adds a quicker way to draw, a fuller way to read the keyboard, mouse and fingers, and sprites that can tell when they touch.

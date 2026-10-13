@@ -154,6 +154,39 @@ or put scenes straight into your page, as many as you like:
 
 Each canvas fills its box, starts when it scrolls into view, and pauses when it is out of view or the tab is hidden. All the scenes on a page share one copy of Python, in a background thread. `pyctures build my-page/ -o site/` copies your page and adds the `pyctures/` folder. See [Use it on your website](docs/website.md), and the two-scene page in [`examples/website`](examples/website).
 
+## Sound, and dials to turn
+
+A scene can make sound, with one line at the top:
+
+```python
+from synths import *
+
+def on_mouse_down(x, y):
+    play_sound("coin")
+    play_notes("C4 E4 G4 C5", 0.12, after=0.3)
+
+def draw():
+    background("midnightblue")
+    text("Click for a sound", width / 2, height / 2, "white", 28, "centre")
+```
+
+There are ready-made game sounds, notes and tunes, and synths you shape yourself: [Sound and music](docs/sound.md). With one more line a scene has dials, sliders and a piano keyboard on it, to play a synth and change it as it sounds: [Dials and a keyboard](docs/dials.md).
+
+```python
+from pyctures import *
+from synths import *
+from pydials import *
+
+lead = make_synth("lead")
+dial("cutoff", lead, "cutoff")
+dial("resonance", lead, "resonance")
+slider("attack", lead, "attack")
+scope(lead)
+keyboard(lead, octave=4)
+```
+
+Both libraries come with Pyctures, and a page loads them only for a scene that uses them.
+
 ## Bringing a JavaScript example across
 
 The calls are the same; a few things are written the Python way.
@@ -258,6 +291,10 @@ In [`examples/`](examples), each with a comment at the top saying what it shows.
 | `hello.py`, `moving.py`, `follow.py`, `first_game.py` | The four small scenes at the top of this page |
 | `night_sky.py` | A whole picture from the plain drawing functions, with no `ctx` |
 | `ring.py` | Twelve circles in a ring |
+| `sound_catcher.py` | A game with sound effects: `play_sound` |
+| `tune.py` | Drums, a bass and a melody that go round, with lights in time |
+| `arpeggio_chords.py` | One voice playing chords, as a sound chip would |
+| `synth_panel.py` | A synth to play: dials, a scope and a piano keyboard on the screen |
 | `website/` | A web page with two scenes on it |
 
 ```bash
@@ -267,7 +304,7 @@ pyctures run examples            # a list of them all
 
 ## Docs
 
-Start with [Getting started](docs/getting-started.md), then [how a program is shaped](docs/program-shape.md), [drawing in 2D](docs/drawing-2d.md), [3D scenes](docs/3d.md), [colours](docs/colours.md), [saved values](docs/saved-values.md), and [tips](docs/tips.md). The [2D functions](docs/2d-functions.md) and [3D functions](docs/3d-functions.md) pages list everything, one line each. The [function index](docs/function-index.md) names every function by area, with a link to where it is explained. Seven tutorials are in [docs/tutorials](docs/tutorials).
+Start with [Getting started](docs/getting-started.md), then [how a program is shaped](docs/program-shape.md), [drawing in 2D](docs/drawing-2d.md), [3D scenes](docs/3d.md), [colours](docs/colours.md), [saved values](docs/saved-values.md), [sound and music](docs/sound.md), [dials and a keyboard](docs/dials.md), and [tips](docs/tips.md). The [2D functions](docs/2d-functions.md) and [3D functions](docs/3d-functions.md) pages list everything, one line each. The [function index](docs/function-index.md) names every function by area, with a link to where it is explained. Seven tutorials are in [docs/tutorials](docs/tutorials).
 
 
 ## Pyctures in Circuitry Studio

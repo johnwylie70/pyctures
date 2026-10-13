@@ -1,16 +1,19 @@
 """``pyctures build``: a static folder, or one HTML file, that runs scenes in any browser.
 
 The folder holds the scene, an ``index.html`` and a ``pyctures/`` folder
-(the browser half, three.js, and the Python half as ``pyctures.py``). Python
+(the browser half, three.js, sound and dials, and the Python half as
+``pyctures.py``). Python
 itself is Pyodide, loaded from its official CDN, and runs in a Web Worker so
 the page's own thread only draws. Every path is relative, so the folder can be
 put on any static host, or inside an existing site.
 
 When the output ends in ``.html`` (``-o scene.html``) the result is ONE file
-holding all of that (three.js only when the scene uses it), which also opens
-straight from disk.
+holding all of that (three.js only when the scene uses it, sound and controls
+only when it imports ``synths`` or ``pydials``), which also opens straight
+from disk.
 
-Images the scene loads by a relative path (``load_image("textures/brick.png")``,
+Sound files it names (``load_sample("sounds/kick.wav")``) are included in the
+same way. Images the scene loads by a relative path (``load_image("textures/brick.png")``,
 ``THREE.TextureLoader().load(...)``) are found in its string literals and
 included: copied beside the page in a folder, packed into a single file (where
 the browser half points those loads at the packed copy). An image that is
@@ -52,7 +55,7 @@ def build(target, out, add=(), title=None, say=print):
     say("Built %s" % out)
     for w in written:
         say("  %s" % w)
-    say("  pyctures/  (the browser half and three.js)")
+    say("  pyctures/  (the browser half, three.js, sound and dials)")
     say("Serve the folder with any static web server, for example:\n"
         "  python -m http.server --directory %s" % _short(out))
     return out
@@ -71,15 +74,26 @@ def build_single(scene, out, add=(), title=None, say=print):
         if key not in files:
             files[key] = path.read_bytes()
         images.append(key)
+    # A sample or a song goes in the same way: Python finds the file and sends it to the page.
+    sounds = []
+    for key, path in scene_sounds(scene, source, say):
+        if key not in files:
+            files[key] = path.read_bytes()
+        sounds.append(key)
     three = pages.uses_three(source)
+    # Sound and dials go in when the scene, or a .py file that comes with it, imports them.
+    texts = [source] + [data.decode("utf-8", "replace") for rel, data in files.items() if rel.endswith(".py")]
+    libraries = [name for name in pages.LIBRARIES if any(pages.uses_library(t, name) for t in texts)]
     page = pages.single_page(title or scene.stem.replace("_", " ").title(), scene.name, source,
-                             files=files, three=three)
+                             files=files, three=three, libraries=libraries)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     say("Built %s (%d KB%s)" % (_short(out), (len(page.encode("utf-8")) + 1023) // 1024,
-                                 ", with three.js" if three else ""))
+                                 "".join(", with " + n for n in (["three.js"] if three else []) + libraries)))
     if images:
         say("  with %d image%s: %s" % (len(images), "" if len(images) == 1 else "s", ", ".join(images)))
+    if sounds:
+        say("  with %d sound file%s: %s" % (len(sounds), "" if len(sounds) == 1 else "s", ", ".join(sounds)))
     say("One file: open it in a browser, or put it on any website.")
     return out
 
@@ -101,19 +115,24 @@ def _added(scene, add):
             yield rel.as_posix(), extra
 
 
-def scene_images(scene, source, say=print):
+def scene_sounds(scene, source, say=print):
+    """(key, file) for each sound file the scene names by a relative path (a sample, a song) and that exists beside it."""
+    return scene_images(scene, source, say, pages.sound_paths_in_source(source), "sound file")
+
+
+def scene_images(scene, source, say=print, paths=None, what="image"):
     """(key, file) for each image the scene names by a relative path and that
     exists beside it. A named image that is not there is reported with ``say``."""
     found = []
-    for written in pages.image_paths_in_source(source):
+    for written in pages.image_paths_in_source(source) if paths is None else paths:
         key = pages.packed_key(written)
         path = (scene.parent / key).resolve()
         if path.is_file():
             if key not in (k for k, _ in found):
                 found.append((key, path))
         else:
-            say("Warning: %s loads the image %s, which was not found (looked for %s)."
-                % (scene.name, written, _short(path)))
+            say("Warning: %s loads the %s %s, which was not found (looked for %s)."
+                % (scene.name, what, written, _short(path)))
     return found
 
 
@@ -139,10 +158,11 @@ def _build_scene(scene, out, add, title, say):
         shutil.copyfile(f, out / rel)
         files.append(rel)
     written.extend(dict.fromkeys(_top_level(scene, add)))
-    for key, f in scene_images(scene, scene.read_text(encoding="utf-8"), say):
+    source = scene.read_text(encoding="utf-8")
+    for key, f in scene_images(scene, source, say) + scene_sounds(scene, source, say):
         target = (out / key).resolve()
         if out != target.parent and out not in target.parents:
-            say("Warning: %s loads the image %s, which is outside the scene's folder and was "
+            say("Warning: %s loads the file %s, which is outside the scene's folder and was "
                 "not copied. Move it into the scene's folder." % (scene.name, key))
             continue
         if target != f:
@@ -171,7 +191,9 @@ def _build_folder(folder, out, title, say):
         written.append(rel.as_posix())
         if f.suffix == ".py":
             # Copied with the folder already; only say which named images are missing.
-            scene_images(f, f.read_text(encoding="utf-8", errors="replace"), say)
+            text = f.read_text(encoding="utf-8", errors="replace")
+            scene_images(f, text, say)
+            scene_sounds(f, text, say)
             if len(rel.parts) == 1:
                 scenes.append(rel)
     if not (folder / "index.html").exists():

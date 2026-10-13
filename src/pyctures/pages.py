@@ -17,7 +17,29 @@ ASSETS = {
     "three/three.core.min.js": WEB / "three" / "three.core.min.js",
     "three/OrbitControls.js": WEB / "three" / "OrbitControls.js",
     "three/LICENSE": WEB / "three" / "LICENSE",
+    # Sound (`from synths import *`) and on-screen controls (`from pydials import *`): copies, written
+    # elsewhere and brought here by scripts/sync_libraries.py. A page loads them only for a scene that uses them.
+    "synths/synths.js": WEB / "synths" / "synths.js",
+    "synths/synths_core.wasm": WEB / "synths" / "synths_core.wasm",
+    "synths/synths-worklet.js": WEB / "synths" / "synths-worklet.js",
+    "synths/synths.py": WEB / "synths" / "synths.py",
+    "synths/LICENSE": WEB / "synths" / "LICENSE",
+    "dials/dials.js": WEB / "dials" / "dials.js",
+    "dials/pydials.py": WEB / "dials" / "pydials.py",
+    "dials/LICENSE": WEB / "dials" / "LICENSE",
 }
+
+# The libraries a scene asks for by importing them: the name it imports -> (its folder, the page's half,
+# the Python half). The browser half has the same table (pyctures.js, LIBRARIES).
+LIBRARIES = {
+    "synths": ("synths", "synths.js", "synths.py"),
+    "pydials": ("dials", "dials.js", "pydials.py"),
+}
+
+
+def uses_library(source, name):
+    """Whether a scene imports a library (the same test the browser half makes)."""
+    return re.search(r"^[ \t]*(?:from|import)[ \t]+%s\b" % name, source, re.M) is not None
 
 
 def scene_page(title, src, script, server=False, output="console", files=()):
@@ -58,10 +80,24 @@ def _script_for_html(js):
     return js.replace("</script", "<\\/script").replace("<!--", "<\\!--")
 
 
-def single_page(title, name, source, files=None, three=False):
+def library_for_page(name):
+    """One library as a single-file page carries it: the page's half, the Python half, and for sound the engine."""
+    folder, js, py = LIBRARIES[name]
+    packed = {
+        "js": ASSETS["%s/%s" % (folder, js)].read_text(encoding="utf-8"),
+        "py": ASSETS["%s/%s" % (folder, py)].read_text(encoding="utf-8"),
+    }
+    engine = ASSETS.get("%s/%s_core.wasm" % (folder, folder))
+    if engine is not None:
+        packed["wasm"] = base64.b64encode(engine.read_bytes()).decode("ascii")
+    return packed
+
+
+def single_page(title, name, source, files=None, three=False, libraries=()):
     """One self-contained HTML file: the scene, the Python half, the browser
     half (whose worker it carries inside), and three.js only when the scene
-    uses it. Python itself (Pyodide) still loads from its CDN.
+    uses it, and sound and dials only when it imports them (``libraries``:
+    names from LIBRARIES). Python itself (Pyodide) still loads from its CDN.
 
     ``files``: {path: bytes} the scene opens or imports, and the images it
     loads by a relative path (the browser half points those loads at the
@@ -79,6 +115,8 @@ def single_page(title, name, source, files=None, three=False):
             "module": (WEB / "three" / "three.module.min.js").read_text(encoding="utf-8"),
             "orbit": (WEB / "three" / "OrbitControls.js").read_text(encoding="utf-8"),
         }
+    for library in libraries:
+        data[LIBRARIES[library][0]] = library_for_page(library)
     attrs = ' data-pyctures-src="%s" data-pyctures-fullpage' % html.escape(name)
     if files:
         attrs += ' data-pyctures-files="%s"' % html.escape(",".join(files))
@@ -125,6 +163,19 @@ def image_paths_in_source(source):
     found = []
     for m in _LITERAL.finditer(source):
         if is_relative_image_path(m.group(2)) and m.group(2) not in found:
+            found.append(m.group(2))
+    return found
+
+
+# A relative path to a sound file: what load_sample("sounds/kick.wav") and play_song("tune.mod") name.
+SOUND_PATH = re.compile(r"^(?![a-z][a-z0-9+.-]*:|/)(?:\./)?[^\s\"'<>?#]+\.(wav|mp3|ogg|oga|m4a|aac|flac|mod|xm)$", re.I)
+
+
+def sound_paths_in_source(source):
+    """Relative sound file paths named by string literals in a scene, as written."""
+    found = []
+    for m in _LITERAL.finditer(source):
+        if len(m.group(2)) < 300 and SOUND_PATH.match(m.group(2)) and m.group(2) not in found:
             found.append(m.group(2))
     return found
 

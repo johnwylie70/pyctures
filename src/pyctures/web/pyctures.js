@@ -12,7 +12,10 @@
  * commands the Python half (`pyctures/__init__.py`) records, answers reads, and
  * reports input. Fixed handles (they must match the Python half): 1 window,
  * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons,
- * 7 plain drawing, 8 saved values, 9 files and databases.
+ * 7 plain drawing, 8 saved values, 9 files and databases, 10 sound, 11 dials and other on-screen controls.
+ *
+ * SOUND AND DIALS are two libraries of their own (synths and dials), carried beside this file in
+ * `synths/` and `dials/` and loaded only for a scene that uses them: see soundKeeper and dialsKeeper.
  *
  * THE PAGE'S MAIN THREAD only draws: Python runs in your own Python (`run`) or
  * in a worker (`build`), so a slow frame, Python's garbage collection or a
@@ -334,7 +337,7 @@ export function inputOf(source) {
  * onApplied({reads, errors, ms, n, timing}), onReads(reads) (a promise has
  * settled), isActive() (has the keyboard).
  */
-export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, hooks }) {
+export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, sound = null, dials = null, hooks }) {
   const H = new Map()
   let ctx2d = null
   let dpr = 1, cssW = 0, cssH = 0
@@ -742,6 +745,11 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
     text: (path, text) => { if (files) files.text(String(path), String(text)) },
     bytes: (path, base64) => { if (files) files.bytes(String(path), String(base64)) },
   })
+  // SOUND: Python's play_sound(), make_synth() and the rest (the library synths). A frame's sounds are ONE
+  // command, send(batch). DIALS: Python's dial(), slider() and keyboard() (the library pydials). See soundKeeper.
+  if (sound) H.set(10, sound)
+  const panel = dials ? dials(canvas) : null
+  if (panel) H.set(11, panel)
   window.addEventListener('keydown', sendInput)
   window.addEventListener('keyup', sendInput)
   window.addEventListener('blur', sendInput)
@@ -788,6 +796,14 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   return {
     /** Queue one frame's commands; drawn on the next refresh. */
     push(cmds, at) {
+      // A frame's sounds are heard now, not when the frame is drawn: they are timed, and waiting for a refresh
+      // (or two, in the queue) would use up the moment the player has to place them exactly.
+      if (sound && cmds) {
+        for (let i = 0; i < cmds.length; i++) {
+          const c = cmds[i]
+          if (c[3] === 10 && c[0] === 'call' && c[4] === 'send') { sound.send(c[5][0]); cmds[i] = NOTHING_TO_DO }
+        }
+      }
       // Not a file's own text: that is the scene's to keep as it wrote it.
       if (images && cmds) swapStrings(cmds.some((c) => c[0] === 'call' && c[3] === 9) ? cmds.filter((c) => !(c[0] === 'call' && c[3] === 9)) : cmds, images)
       pending.push({ cmds: cmds || [], at, recv: at ? abs() : 0 })
@@ -804,8 +820,314 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
       window.removeEventListener('pointerup', sendInput)
       window.removeEventListener('pointercancel', sendInput)
       for (const g of glRenderers) { try { g.dispose() } catch (e) { /* already gone */ } }
+      if (panel) panel.close()
       H.clear()
     },
+  }
+}
+
+// ---------------------------------------------------------------- sound and dials
+
+/** A command that does nothing: what a frame's sounds leave in their place once they have been sent on. */
+const NOTHING_TO_DO = ['free', 0, 0]
+
+/** Does the scene import a library (`from synths import *`, `import pydials`)? Python's pages.uses_library makes the same test. */
+export function usesLibrary(source, name) {
+  return new RegExp('^[ \\t]*(?:from|import)[ \\t]+' + name + '\\b', 'm').test(source || '')
+}
+
+/**
+ * The libraries a scene asks for by importing them: the name it imports -> the folder beside this file, the
+ * page's half and the Python half. Python's pages.LIBRARIES is the same table.
+ */
+export const LIBRARIES = {
+  synths: { folder: 'synths', js: 'synths.js', py: 'synths.py' },
+  pydials: { folder: 'dials', js: 'dials.js', py: 'pydials.py' },
+}
+
+const libraries = {}
+/**
+ * The page's half of a library (`name`: what a scene imports, `synths` or `pydials`), as a module: from a host (`given`: the module itself, a
+ * promise of it, or its address), from inside a single-file page, or from the folder beside this file. It is
+ * loaded once, and only when a scene needs it.
+ */
+function loadLibrary(name, given) {
+  if (given && typeof given !== 'string') return Promise.resolve(given)
+  if (!libraries[name]) {
+    const inl = inline(), { folder, js } = LIBRARIES[name]
+    const packed = !given && inl && inl[folder] && inl[folder].js
+    // A module made from text has no address of its own for the files beside it: it is given the page's
+    // (the engine and the worklet are handed to it, so nothing is looked for there).
+    const url = given ? new URL(given, document.baseURI).href
+      : packed ? URL.createObjectURL(new Blob([packed.split("new URL('./', import.meta.url)").join("new URL('./', document.baseURI)")], { type: 'text/javascript' }))
+        : new URL(`${folder}/${js}`, BASE).href
+    libraries[name] = import(url)
+    libraries[name].catch(() => { delete libraries[name] })
+  }
+  return libraries[name]
+}
+
+const libraryTexts = {}
+/** The Python half of a library as text, for a browser's Python: from a single-file page, or beside this file. */
+function loadLibraryPython(name) {
+  if (!libraryTexts[name]) {
+    const inl = inline(), { folder, py } = LIBRARIES[name]
+    libraryTexts[name] = inl && inl[folder] && inl[folder].py ? Promise.resolve(inl[folder].py)
+      : fetch(new URL(`${folder}/${py}`, BASE)).then((r) => {
+        if (!r.ok) throw new Error(`${py} was not found beside pyctures.js (in ${folder}/)`)
+        return r.text()
+      })
+    libraryTexts[name].catch(() => { delete libraryTexts[name] })
+  }
+  return libraryTexts[name]
+}
+
+/** {name: Python source} for each library the scene, or a .py file that comes with it, imports. */
+async function pythonLibraries(source, files) {
+  const texts = [source]
+  for (const f of files || []) if (/\.py$/i.test(f.path)) texts.push(new TextDecoder().decode(f.data))
+  const out = {}
+  for (const name in LIBRARIES) if (texts.some((t) => usesLibrary(t, name))) out[name] = await loadLibraryPython(name)
+  return out
+}
+
+const base64Bytes = (text) => Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0))
+const nameKey = (name) => String(name).toLowerCase().replace(/[_.\s-]/g, '')
+const SOUND_UNITS = { hz: 'Hz', seconds: 's', semitones: 'st', cents: 'ct', octaves: 'oct' }
+const NO_READING = { samples: [], level: [0, 0], notes: [] }
+
+/**
+ * SOUND: the page's end of Python's `synths` (handle 10). Python never makes a sound: it writes commands
+ * in the format of synths.js (`synths/synths.js` beside this file, whose docs/commands.md is the contract)
+ * and a frame's commands arrive together as one call, `send(batch)`. A player made here by synths.js carries
+ * them out, on the audio thread.
+ *
+ * TIME. Each command carries when it was asked for on PYTHON's clock, which may be another computer's. The
+ * batch's `now` is that clock when the frame was sent, so the shortest journey seen is the difference between
+ * the two clocks; every command is moved onto the PAGE's clock (performance.now() / 1000) before it goes on.
+ * So the player, or a host, sees one clock, whether a command came from Python or from a key on the page.
+ *
+ * `synth(id)` is the page's own object for one of Python's synths, with what dials.js looks for in a
+ * target: set, get, describe, noteOn, noteOff, samples, level and notes. A dial or a piano key in the page
+ * acts on it here, at once, and Python is only told afterwards. `output()` is the same for all the sound.
+ *
+ * `host` is the `sound` option of mount(), from an app that shows scenes; every part of it is optional:
+ *   send(batch)       take the commands and play them somewhere else. Nothing is played or loaded here
+ *   read(id)          with send: what a synth is doing, { samples, level, notes }, for scopes and meters
+ *   synths            synths.js itself: the module, a promise of it, or its address (a page that may not fetch)
+ *   wasm, worklet     the engine's bytes and how its worklet is loaded: createPlayer's options of those names
+ *   latency           seconds everything is played ahead: createPlayer's
+ *   onState(state)    told 'waiting' (for a tap), 'on' or 'failed'
+ *
+ * synths.js is loaded when the first sound is asked for, or before the scene starts when its source imports
+ * `synths` (`module`). A scene that makes no sound loads nothing.
+ */
+function soundKeeper({ host = null, src = '', module = null, onState = null }) {
+  host = host || {}
+  const clock = () => performance.now() / 1000
+  const elsewhere = typeof host.send === 'function'
+  let mod = module, player = null, loading = null, closed = false, paused = false
+  let offset = null, last = 0, used = false
+  let held = []                // batches that came before synths.js had loaded
+  const synths = new Map()     // id -> { preset, set: [[name, value]…] }: what has been asked of each synth
+  const shared = []            // [[name, value]…] the settings every synth shares
+  let volume = 1, table = null
+
+  function load() {
+    if (!loading) {
+      loading = loadLibrary('synths', host.synths).then((m) => {
+        mod = m
+        const waited = held
+        held = []
+        for (const batch of waited) out(batch)
+      }, (e) => { console.error('Sound could not load: ' + ((e && e.message) || e)) })
+    }
+    return loading
+  }
+
+  function makePlayer() {
+    const inl = inline()
+    const packed = inl && inl.synths && inl.synths.wasm
+    const options = { onState: (state) => { if (onState) onState(state); if (host.onState) host.onState(state) } }
+    if (host.wasm) options.wasm = host.wasm
+    else if (packed) { options.wasm = base64Bytes(packed); options.worklet = 'blob' }
+    if (host.worklet) options.worklet = host.worklet
+    if (host.latency != null) options.latency = host.latency
+    player = mod.createPlayer(options)
+    if (paused) player.pause()
+  }
+
+  // A batch, on the page's clock, to whoever plays it.
+  function out(batch) {
+    if (closed) return
+    used = true
+    if (elsewhere) { host.send(batch); return }
+    if (!mod) { held.push(batch); load(); return }
+    if (!player) makePlayer()
+    player.send(batch)
+  }
+  // One command from the page itself (a key, a dial), now.
+  const own = (c) => { c.t = clock(); remember(c); out({ synths: 1, now: c.t, cmds: [c] }) }
+
+  function remember(c) {
+    if (c.op === 'synth') synths.set(c.id, { preset: c.preset || null, set: Object.entries(c.set || {}) })
+    else if (c.op === 'set' && c.set) {
+      if (!synths.has(c.id)) synths.set(c.id, { preset: 'keys', set: [] })
+      synths.get(c.id).set.push(...Object.entries(c.set))
+    } else if (c.op === 'master') {
+      if (typeof c.volume === 'number') volume = c.volume
+      if (c.set) shared.push(...Object.entries(c.set))
+    }
+  }
+
+  // A file a sample or a song names is beside the scene, wherever the page is.
+  const beside = (path) => { try { return new URL(path, new URL(src || '', document.baseURI)).href } catch (e) { return path } }
+
+  // The settings as synths.js describes them: nameKey(any way of writing a name) -> { the engine's entry, scale }.
+  function settings() {
+    if (!table && mod && mod.describe) {
+      const d = mod.describe(), byName = new Map()
+      table = { names: new Map(), synths: d.synths || {}, plain: d.plain || {}, words: d.choiceWords || {} }
+      for (const entry of d.settings || []) { byName.set(entry.name, entry); table.names.set(nameKey(entry.name), { entry, scale: 1 }) }
+      for (const alias in d.names || {}) {
+        const entry = byName.get(d.names[alias].setting)
+        if (entry) table.names.set(nameKey(alias), { entry, scale: d.names[alias].scale || 1 })
+      }
+    }
+    if (!mod) load()
+    return table
+  }
+  // The last value given for a setting in a list of [name, value], in the engine's own measure; undefined if none was.
+  function lastOf(list, entry) {
+    let found
+    for (const [name, value] of list) {
+      const at = table.names.get(nameKey(name))
+      if (!at || at.entry !== entry) continue
+      if (typeof value === 'number') found = value * at.scale
+      else if (typeof value === 'boolean') found = value ? 1 : 0
+      else if (typeof value === 'string' && entry.choices) {
+        const word = value.toLowerCase().trim()
+        const i = entry.choices.indexOf(entry.choices.includes(word) ? word : table.words[word])
+        if (i >= 0) found = i
+      }
+    }
+    return found
+  }
+  function valueOf(lists, name) {
+    const t = settings(), at = t && t.names.get(nameKey(name))
+    if (!at) return undefined
+    let value
+    for (const list of lists) { const v = lastOf(list, at.entry); if (v !== undefined) value = v }
+    if (value === undefined) value = at.entry.default
+    value = Math.min(at.entry.max, Math.max(at.entry.min, value))
+    return at.entry.kind === 'choice' ? at.entry.choices[value] : at.entry.kind === 'bool' ? value === 1 : value / at.scale
+  }
+  function describe(name, whose) {
+    const t = settings(), at = t && t.names.get(nameKey(name))
+    if (!at || (whose && at.entry.scope !== whose)) return null
+    const { entry, scale } = at
+    const d = { name: String(name), kind: entry.kind, min: entry.min / scale, max: entry.max / scale, default: entry.default / scale }
+    const unit = SOUND_UNITS[scale === 12 ? 'octaves' : entry.unit]
+    if (unit) d.unit = unit
+    // A time from nothing to twenty seconds is turned evenly by how much longer it gets, from a thousandth of a second:
+    // half the dial is then the short times that an attack or a release is nearly always set to.
+    if (entry.unit === 'seconds' && entry.min === 0 && entry.max >= 1) { d.min = 0.001; d.log = true }
+    if (entry.choices) { d.choices = [...entry.choices]; d.default = entry.default }
+    return d
+  }
+  const reading = (id) => (player && player.read ? player.read(id) : elsewhere && typeof host.read === 'function' ? host.read(id) : null) || NO_READING
+
+  function synth(id) {
+    const lists = () => {
+      const t = settings(), mine = synths.get(id)
+      return t ? [Object.entries(t.plain), Object.entries((mine && t.synths[mine.preset]) || {}), mine ? mine.set : []] : []
+    }
+    return {
+      id,
+      describe: (name) => describe(name),
+      get: (name) => valueOf(lists(), name),
+      set: (name, value) => own({ op: 'set', id, set: { [name]: value } }),
+      noteOn: (note, velocity = 0.8) => own({ op: 'note', id, note: [note], len: null, vel: velocity }),
+      noteOff: (note) => own({ op: 'off', id, note: [note] }),
+      samples: () => reading(id).samples,
+      level: () => reading(id).level,
+      notes: () => reading(id).notes,
+    }
+  }
+
+  return {
+    /** A frame's sounds from Python: { synths: 1, now, cmds }. */
+    send(batch) {
+      if (closed || !batch || !Array.isArray(batch.cmds)) return
+      const here = clock()
+      if (typeof batch.now === 'number') {
+        // The shortest journey seen is how far apart the two clocks are; it may creep up half a millisecond a second.
+        const seen = here - batch.now
+        offset = offset === null ? seen : Math.min(seen, offset + 0.0005 * Math.max(0, here - last))
+        last = here
+      }
+      for (const c of batch.cmds) {
+        if (!c) continue
+        c.t = offset === null ? here : (typeof c.t === 'number' ? c.t : batch.now) + offset
+        if (typeof c.url === 'string') c.url = beside(c.url)
+        remember(c)
+      }
+      out({ synths: batch.synths || 1, now: here, cmds: batch.cmds })
+    },
+    synth,
+    /** All the sound together: its volume and the shared effects to set, and what it is doing to read. */
+    output: () => ({
+      describe: (name) => (nameKey(name) === 'volume' ? { name: 'volume', kind: 'float', min: 0, max: 2, default: 1 } : describe(name, 'all')),
+      get: (name) => (nameKey(name) === 'volume' ? volume : valueOf([shared], name)),
+      set: (name, value) => own(nameKey(name) === 'volume' ? { op: 'master', volume: value } : { op: 'master', set: { [name]: value } }),
+      samples: () => reading().samples,
+      level: () => reading().level,
+      notes: () => reading().notes,
+    }),
+    /** The player, once a sound has been asked for (null when a host takes the commands). */
+    get player() { return player },
+    /** Silence while the scene is out of view, with everything kept as it is. */
+    pause() { paused = true; if (player) player.pause() },
+    resume() { paused = false; if (player) player.resume() },
+    close() {
+      if (closed) return
+      if (elsewhere && used) host.send({ synths: 1, now: clock(), cmds: [{ op: 'stop', t: clock() }] })
+      closed = true
+      if (player) player.close()
+    },
+  }
+}
+
+/**
+ * DIALS: the page's end of Python's `pydials` (handle 11): dials, sliders, a piano keyboard, a scope and
+ * meters, drawn over the scene by `dials/dials.js` beside this file. Python makes each with one command
+ * and is told with the next frame what a hand changed. `module`: dials.js when the scene's source imports
+ * `pydials`, so it is there before the scene starts; otherwise it is loaded when the first control is asked
+ * for, and what was asked of it meanwhile is done then. `given`: a host's copy (as for sound's `synths`).
+ */
+function dialsKeeper({ given = null, module = null }) {
+  const made = (m, canvas) => { const api = m.dials(canvas, { fresh: true }); api.close = () => api.panel.close(); return api }
+  return (canvas) => {
+    if (module) return made(module, canvas)
+    let api = null, closed = false
+    const calls = []
+    const call = (name, args) => { if (typeof api[name] === 'function') return api[name](...args) }
+    const begin = () => {
+      begin.done = begin.done || loadLibrary('pydials', given).then((m) => {
+        if (closed) return
+        api = made(m, canvas)
+        for (const [name, args] of calls.splice(0)) call(name, args)
+      }, (e) => { console.error('The controls could not load: ' + ((e && e.message) || e)) })
+    }
+    const close = () => { closed = true; if (api) api.close() }
+    return new Proxy({}, {
+      has: () => true,
+      get: (_, name) => (name === 'close' ? close : (...args) => {
+        if (api) return call(name, args)
+        calls.push([name, args])
+        begin()
+      }),
+    })
   }
 }
 
@@ -814,7 +1136,8 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
 // `pyctures build scene.py -o scene.html` writes one HTML file. What a folder
 // would hold beside the page comes inside it instead, as JSON in
 // <script type="application/json" id="pyctures-inline">:
-//   {runtime, sources: {path: text}, files: {path: base64}, three: {core, module, orbit}}
+//   {runtime, sources: {path: text}, files: {path: base64}, three: {core, module, orbit},
+//    synths: {js, py, wasm: base64}, dials: {js, py}}
 
 let inlineData
 function inline() {
@@ -904,8 +1227,17 @@ export function websocketTransport(src) {
 // the module, and is made the module `pyctures` for the length of each call,
 // so scenes cannot see each other.
 const PY_HOST = `
-import sys, types
+import sys, os, types, importlib
 _pyctures_scenes = {}
+# The libraries a scene asks for by importing them (synths, pydials): each is one file, put here for the scene that needs it.
+os.makedirs('/pyctures-libraries', exist_ok=True)
+sys.path.append('/pyctures-libraries')
+def _pyctures_library(name, source):
+    path = '/pyctures-libraries/%s.py' % name
+    if not os.path.exists(path):
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(source)
+        importlib.invalidate_caches()
 def _pyctures_new(sid):
     m = types.ModuleType('pyctures')
     m.__file__ = 'pyctures.py'
@@ -1014,6 +1346,7 @@ function workerMain() {
       try { await booting } catch (e) { throw new Error('Python could not load: ' + ((e && e.message) || e)) }
       if (m.op === 'start') {
         writeFiles(m.files)
+        for (const name in m.libraries || {}) py.globals.get('_pyctures_library')(name, m.libraries[name])
         await py.loadPackagesFromImports(m.source)
         if (m.sqlite) await py.loadPackage('sqlite3')
         py.globals.get('_pyctures_new')(m.sid)
@@ -1100,8 +1433,10 @@ export function workerTransport(src, files = []) {
     keepsFiles: true,   // Python's files are forgotten with the page: the page hands them over and keeps what is written
     async start(source, info, stored) {
       worker = pythonWorker()
-      const data = (await readFiles(src, files)).concat(putIn(storedIn(sid), stored))
-      return worker.call({ op: 'start', sid, source, info: JSON.stringify({ ...info, files_in: storedIn(sid) }), files: data, sqlite: usesDatabase(source) }, data.map((d) => d.data))
+      const beside = await readFiles(src, files)
+      const libraries = await pythonLibraries(source, beside)
+      const data = beside.concat(putIn(storedIn(sid), stored))
+      return worker.call({ op: 'start', sid, source, info: JSON.stringify({ ...info, files_in: storedIn(sid) }), files: data, libraries, sqlite: usesDatabase(source) }, data.map((d) => d.data))
     },
     tick(payload) { return worker.call({ op: 'tick', sid, payload: JSON.stringify(payload) }) },
     async stop() {
@@ -1142,7 +1477,10 @@ export function pyodideTransport(src, files = []) {
     async start(source, info, stored) {
       py = await loadPyodideOnce()
       callPy = py.globals.get('_pyctures_call')
-      for (const f of (await readFiles(src, files)).concat(putIn(storedIn(sid), stored))) {
+      const beside = await readFiles(src, files)
+      const libraries = await pythonLibraries(source, beside)
+      for (const name in libraries) py.globals.get('_pyctures_library')(name, libraries[name])
+      for (const f of beside.concat(putIn(storedIn(sid), stored))) {
         const parts = f.path.split('/')
         for (let i = 1; i < parts.length; i++) {
           try { py.FS.mkdir(parts.slice(0, i).join('/')) } catch (e) { /* exists */ }
@@ -1204,6 +1542,8 @@ let activeScene = null
  *   autoStart   false: wait for scene.start()
  *   makeTransport  a function that makes a fresh transport for each run
  *   storage     where the scene's files and databases are kept, from a host (see sceneFiles)
+ *   sound       how the scene's sound is played, from a host (see soundKeeper)
+ *   dials       dials.js from a host: the module, a promise of it, or its address
  */
 export class Scene {
   constructor(el, options) {
@@ -1241,13 +1581,21 @@ export class Scene {
       const seen = entries[entries.length - 1].isIntersecting
       if (seen === this.visible) return
       this.visible = seen
+      this.hush()
       if (seen && this.status === 'idle' && this.opt.autoStart) this.start()
       else if (seen) this.resume()
     }, { rootMargin: '100px' })
     this.io.observe(el)
-    this.onVisibility = () => { if (!document.hidden) this.resume() }
+    this.onVisibility = () => { this.hush(); if (!document.hidden) this.resume() }
     document.addEventListener('visibilitychange', this.onVisibility)
     this.loop = this.loop.bind(this)
+  }
+
+  /** A scene that is out of view or in a hidden tab is silent, with its sound kept as it is. */
+  hush() {
+    if (!this.sound) return
+    if (this.visible && !document.hidden) this.sound.resume()
+    else this.sound.pause()
   }
 
   // -------- output
@@ -1343,6 +1691,15 @@ export class Scene {
       if (/\bTHREE\b|\baddons\b/.test(source)) {
         try { three = await loadThree() } catch (e) { this.log('err', `3D could not load: ${(e && e.message) || e}`) }
       }
+      // Sound and dials, for a scene that imports them: there before it starts, so a dial knows its range at once.
+      const libs = {}
+      const host = this.opt.sound || {}
+      for (const name in LIBRARIES) {
+        if (!usesLibrary(source, name)) continue
+        // A host that plays the sound itself needs synths.js here only for what a dial asks of a synth.
+        if (name === 'synths' && typeof host.send === 'function' && !host.synths && !usesLibrary(source, 'pydials')) continue
+        try { libs[name] = await loadLibrary(name, name === 'synths' ? host.synths : this.opt.dials) } catch (e) { this.log('err', `${name} could not load: ${(e && e.message) || e}`) }
+      }
       // Everything the scene has stored, to put in Python's file system before it starts.
       const stored = this.transport.keepsFiles ? await this.files.all() : []
       if (token !== r.token) return
@@ -1355,7 +1712,15 @@ export class Scene {
       this.el.insertBefore(this.canvas, this.el.firstChild)
       this.canvas.addEventListener('pointerdown', () => { activeScene = this })
       this.canvas.addEventListener('focus', () => { activeScene = this })
+      const waiting = 'Click, tap or press a key to turn the sound on'
+      this.sound = soundKeeper({
+        host: this.opt.sound, src: this.opt.src, module: libs.synths,
+        // A browser keeps a page silent until it has been touched: say so over the scene, until it has been.
+        onState: (state) => { if (token === r.token && (state === 'waiting' || (this.coverEl && this.coverEl.textContent === waiting))) this.cover(state === 'waiting' ? waiting : '') },
+      })
       this.renderer = createRenderer(this.canvas, {
+        sound: this.sound,
+        dials: dialsKeeper({ given: this.opt.dials, module: libs.pydials }),
         three: three && three.three,
         addons: three && three.addons,
         images: imageResolver(this.opt.src, inl && inl.files),
@@ -1408,6 +1773,7 @@ export class Scene {
     this.unwatch()
     if (this.status === 'running' || this.status === 'starting') this.setStatus('stopped')
     if (this.renderer) { this.renderer.destroy(); this.renderer = null }
+    if (this.sound) { this.sound.close(); this.sound = null }
     if (this.transport) {
       // Python in the middle of a frame cannot be asked to stop: a worker is
       // ended instead (and started afresh on the next run).
@@ -1677,6 +2043,8 @@ function serverMode() {
  *   data-pyctures-worker      "off" runs Python on the page's own thread
  * `options.storage` (from a host, not an attribute): where the scene's files and databases
  * are kept, an object with any of list, readText, writeText, readBytes, writeBytes (see sceneFiles).
+ * `options.sound` (from a host): how the scene's sound is played, an object with any of send, read,
+ * synths, wasm, worklet, latency, onState (see soundKeeper). `options.dials`: dials.js from a host.
  */
 export function mount(el, options = {}) {
   if (el.pycturesScene) return el.pycturesScene
@@ -1694,6 +2062,8 @@ export function mount(el, options = {}) {
     autoStart: options.autoStart !== false,
     makeTransport: make,
     storage: options.storage,
+    sound: options.sound,
+    dials: options.dials,
   })
   return scene
 }

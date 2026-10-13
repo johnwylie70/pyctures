@@ -616,6 +616,7 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `send_midi_control(number, value)`, `send_midi_bend(bend)`, `send_midi_program(number)`, `send_midi(bytes)`, `send_midi_clock()` | A knob, the pitch wheel, a sound by number, any message, and the beat |
 | `lead.send_to_midi()` | What a synth plays also goes out as MIDI |
 | `midi_devices()`, `use_midi_input(name)`, `use_midi_output(name)` | What is plugged in, and which to use |
+| `midi_input()`, `lead.midi_input()`, `midi_output()` | The MIDI device and channel as something a control is tied to: `select("device", midi_input(), "device")`, and `"channel"` |
 | `receive_midi(message)`, `stop_midi()` | Pretend a message arrived; finish with MIDI |
 
 ## Dials and a keyboard

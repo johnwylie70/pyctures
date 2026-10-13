@@ -1767,6 +1767,20 @@ def _call_frame_functions(dt):
                 S.tasks.append(task)
 
 
+_MIDI_NAMES = ("on_midi", "on_midi_note", "on_midi_note_off", "on_midi_control", "on_midi_devices")
+
+
+def _midi_hooks(ns):
+    """A scene's own on_midi_note, on_midi_note_off, on_midi_control, on_midi and on_midi_devices are called by
+    the sound library (`synths`), which the page hands what MIDI received with each frame. A scene that has
+    none of them asks nothing of the page. (`from synths import *` gives a scene functions of the same names,
+    for handing a function over; those are the library's own, and are not the scene's.)"""
+    lib = sys.modules.get("synths")
+    use = getattr(lib, "use_midi_hooks", None)
+    if callable(use) and any(callable(ns.get(n)) and getattr(ns[n], "__module__", None) != lib.__name__ for n in _MIDI_NAMES):
+        use(ns)
+
+
 def start(source, info_json):
     """Run the file's top level. Returns the first frame's reply (JSON)."""
     _latest[0].stopped = True
@@ -1818,6 +1832,7 @@ def start(source, info_json):
                 task = [r, None]
                 if _drive(task):
                     S.tasks.append(task)
+        _midi_hooks(ns)
         _call_frame_functions(0.0)
     except BaseException as e:  # noqa: BLE001 — every failure is the user's to read
         msg, line = _format_error(e)

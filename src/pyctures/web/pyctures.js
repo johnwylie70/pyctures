@@ -927,11 +927,20 @@ const NO_READING = { samples: [], level: [0, 0], notes: [] }
  *   wasm, worklet     the engine's bytes and how its worklet is loaded: createPlayer's options of those names
  *   latency           seconds everything is played ahead: createPlayer's
  *   onState(state)    told 'waiting' (for a tap), 'on' or 'failed'
+ *   onMidi(listener, scope)   with send: where the host's own player hands back what MIDI received (its onMidi)
+ *
+ * MIDI (synths.js's docs/midi.md) rides the same batches as `midi` commands, and the player's desk carries them
+ * out here, where the devices are: a keyboard plays a synth (`play`) and a knob turns a setting (`map`, `learn`)
+ * with Python not asked, so both are immediate however slow or far away Python is. What the desk hands back goes
+ * to Python with the next frame (`midi(fn)`, which Python's synths calls once), each event's `time` moved onto
+ * Python's clock; a setting a knob turned is remembered here first, so a dial tied to it turns with the knob.
+ * `midi` is the `midi` option of mount(): a host's own MIDI transport for a browser that has none (an iPad),
+ * or false for no MIDI. synths-midi.js is fetched by synths.js when the first `midi` command arrives.
  *
  * synths.js is loaded when the first sound is asked for, or before the scene starts when its source imports
  * `synths` (`module`). A scene that makes no sound loads nothing.
  */
-function soundKeeper({ host = null, src = '', module = null, onState = null }) {
+function soundKeeper({ host = null, src = '', module = null, onState = null, midi = undefined }) {
   host = host || {}
   const clock = () => performance.now() / 1000
   const elsewhere = typeof host.send === 'function'
@@ -943,6 +952,27 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
   const synths = new Map()     // id -> { preset, set: [[name, value]…] }: what has been asked of each synth
   const shared = []            // [[name, value]…] the settings every synth shares
   let volume = 1, table = null
+  const midiHeard = new Set()  // Python's listeners for what MIDI received
+  let midiLeave = null, devicesSaid = null
+
+  // What the desk says for this scene, as a list of plain objects. Python is handed it as JSON text, which
+  // reaches it whole with the next frame.
+  function hearMidi(events) {
+    const list = []
+    for (const e of Array.isArray(events) ? events : [events]) {
+      if (!e || typeof e !== 'object') continue
+      // A knob turned a setting here, on the page: remembered, so a dial tied to it turns too.
+      if (e.type === 'set') remember({ op: 'set', id: e.id, set: { [e.setting]: e.value } })
+      const m = typeof e.time === 'number' && offset !== null ? { ...e, time: e.time - offset } : e
+      if (e.type === 'devices') devicesSaid = m
+      list.push(m)
+    }
+    if (!list.length || !midiHeard.size || closed) return
+    const told = { midi: JSON.stringify(list) }
+    for (const fn of midiHeard) fn(told)
+  }
+  const joinMidi = (from) => { if (!midiLeave && from && typeof from.onMidi === 'function') midiLeave = from.onMidi(hearMidi, scope) || (() => {}) }
+  if (elsewhere) joinMidi(host)
 
   function load() {
     if (!loading) {
@@ -967,11 +997,18 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
       else if (packed) { options.wasm = base64Bytes(packed); options.worklet = 'blob' }
       if (host.worklet) options.worklet = host.worklet
       if (host.latency != null) options.latency = host.latency
+      // MIDI: a host's own transport, and for a single-file page synths-midi.js from inside it.
+      const transport = midi !== undefined ? midi : host.midi
+      if (transport !== undefined) options.midi = transport
+      if (host.midiSysex) options.midiSysex = true
+      if (host.midiModule) options.midiModule = host.midiModule
+      else if (inl && inl.synths && inl.synths.midi) options.midiModule = URL.createObjectURL(new Blob([inl.synths.midi], { type: 'text/javascript' }))
       mine.player = mod.createPlayer(options)
     }
     pagePlayer.users++
     pagePlayer.heard.add(hear)
     player = pagePlayer.player
+    joinMidi(player)
     if (player.state === 'waiting' || player.state === 'on') hear(player.state)
     if (paused) quiet(true)
   }
@@ -1096,6 +1133,12 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
       out({ synths: batch.synths || 1, scope, now: here, cmds: batch.cmds })
     },
     synth,
+    /** Python asks for what MIDI devices send and what the desk says: fn({ midi: a list of events as JSON text }). */
+    midi(fn) {
+      if (typeof fn !== 'function') return
+      midiHeard.add(fn)
+      if (devicesSaid) fn({ midi: JSON.stringify([devicesSaid]) })
+    },
     /** What a synth is doing now, { samples, level: [left, right], notes }; with no id, all of this scene's sound and everyone's. */
     read: reading,
     scope,
@@ -1118,6 +1161,8 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
       // Everything of this scene is stopped and forgotten; the player goes when its last scene does.
       if (used) out({ synths: 1, scope, now: clock(), cmds: [{ op: 'close', t: clock() }] })
       closed = true
+      if (midiLeave) midiLeave()
+      midiHeard.clear()
       if (player && pagePlayer && pagePlayer.player === player) {
         pagePlayer.heard.delete(hear)
         if (--pagePlayer.users <= 0) { player.close(); pagePlayer = null }
@@ -1742,7 +1787,7 @@ export class Scene {
       this.canvas.addEventListener('focus', () => { activeScene = this })
       const waiting = 'Click, tap or press a key to turn the sound on'
       this.sound = soundKeeper({
-        host: this.opt.sound, src: this.opt.src, module: libs.synths,
+        host: this.opt.sound, src: this.opt.src, module: libs.synths, midi: this.opt.midi,
         // A browser keeps a page silent until it has been touched: say so over the scene, until it has been.
         onState: (state) => { if (token === r.token && (state === 'waiting' || (this.coverEl && this.coverEl.textContent === waiting))) this.cover(state === 'waiting' ? waiting : '') },
       })
@@ -2073,6 +2118,8 @@ function serverMode() {
  * are kept, an object with any of list, readText, writeText, readBytes, writeBytes (see sceneFiles).
  * `options.sound` (from a host): how the scene's sound is played, an object with any of send, read,
  * synths, wasm, worklet, latency, onState (see soundKeeper). `options.dials`: dials.js from a host.
+ * `options.midi` (from a host): a MIDI transport for a browser with none, an object with open, inputs, outputs,
+ * send, receive and changed (synths.js's docs/midi.md), or false for no MIDI. Without it the browser's Web MIDI is used.
  */
 export function mount(el, options = {}) {
   if (el.pycturesScene) return el.pycturesScene
@@ -2091,6 +2138,7 @@ export function mount(el, options = {}) {
     makeTransport: make,
     storage: options.storage,
     sound: options.sound,
+    midi: options.midi,
     dials: options.dials,
   })
   return scene

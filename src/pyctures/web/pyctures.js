@@ -245,6 +245,10 @@ function sceneFiles(scene, storage) {
       return out
     },
     text(path, text) { write('writeText', path, text) },
+    /** Whether a host keeps this scene's bytes as real files (its own writeBytes). */
+    hostKeepsBytes: has('writeBytes'),
+    /** Bytes as they are: a sound file the page's player made (save_sound). */
+    raw(path, bytes) { write('writeBytes', path, bytes) },
     bytes(path, base64) {
       const bin = atob(base64)
       const bytes = new Uint8Array(bin.length)
@@ -937,15 +941,31 @@ const NO_READING = { samples: [], level: [0, 0], notes: [] }
  * `midi` is the `midi` option of mount(): a host's own MIDI transport for a browser that has none (an iPad),
  * or false for no MIDI. synths-midi.js is fetched by synths.js when the first `midi` command arrives.
  *
+ * THE MICROPHONE, RECORDING AND SAVING (synths.js's docs/microphone.md) are `mic`, `record` and `save` commands in
+ * the same batches. The player opens the microphone when the first `mic` command arrives, which is when the
+ * browser asks the person; `microphone` (mount()'s option, or the host's) is a host's own stream or pushed frames
+ * where the page cannot ask, or false for none. What the player says back (the microphone is on or is not, a
+ * recording is over, a file is saved) goes to Python with the next frame, as MIDI does: `events(fn)`, which
+ * Python's synths calls once, is handed { sound: a list of events as JSON text }.
+ *   A SAVED FILE goes, in this order: to Python, as base64 in the `saved` event, when the command says
+ *   `download: false` (Python run by `pyctures run` writes it beside the scene); to `save` (mount()'s option or the
+ *   host's), called with { name, bytes, type }; to the scene's files, when the host's `storage` has writeBytes;
+ *   and otherwise the player downloads it.
+ *
+ * READING BACK. Python cannot ask and be answered, so it says what it wants watched: `watch(id)` (no id: all the
+ * sound) and `watchSong()`. From then on each frame's message carries what that synth is doing, { type: 'reading',
+ * id, samples, level, notes }, and where the song is, { type: 'position', … }, through the same `events(fn)`,
+ * until Python has not asked again for a second and a half. So Python's lead.samples() is a frame late.
+ *
  * synths.js is loaded when the first sound is asked for, or before the scene starts when its source imports
  * `synths` (`module`). A scene that makes no sound loads nothing.
  */
-function soundKeeper({ host = null, src = '', module = null, onState = null, midi = undefined }) {
+function soundKeeper({ host = null, src = '', module = null, onState = null, midi = undefined, microphone = undefined, save = undefined, files = null }) {
   host = host || {}
   const clock = () => performance.now() / 1000
   const elsewhere = typeof host.send === 'function'
   const scope = 'scene' + ++soundScopes
-  const hear = (state) => { if (onState) onState(state); if (host.onState) host.onState(state) }
+  const hear = (now) => { state = now; if (onState) onState(now); if (host.onState) host.onState(now) }
   let mod = module, player = null, loading = null, closed = false, paused = false
   let offset = null, last = 0, used = false
   let held = []                // batches that came before synths.js had loaded
@@ -954,6 +974,12 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   let volume = 1, table = null
   const midiHeard = new Set()  // Python's listeners for what MIDI received
   let midiLeave = null, devicesSaid = null
+  const soundHeard = new Set() // Python's listeners for what the player says back, and for what is watched
+  let soundLeave = null, soundKept = [], micSaid = null, micAsked = false, state = ''
+  const saving = new Map()     // the number of a save -> 'python' (it is given the bytes), or a function that keeps the file
+  const watched = new Map()    // what Python reads back: a synth's id ('' for all the sound, 'song' for its place) -> until when
+  const mics = new Set()       // the ids that are the microphone
+  const keep = save !== undefined ? save : host.save
 
   // What the desk says for this scene, as a list of plain objects. Python is handed it as JSON text, which
   // reaches it whole with the next frame.
@@ -973,6 +999,37 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   }
   const joinMidi = (from) => { if (!midiLeave && from && typeof from.onMidi === 'function') midiLeave = from.onMidi(hearMidi, scope) || (() => {}) }
   if (elsewhere) joinMidi(host)
+
+  // What the player says back for this scene. A saved file is kept where it belongs, and Python is told of it
+  // without the bytes unless it asked for them.
+  const base64Of = (bytes) => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s) }
+  function tellSound(list) {
+    if (!list.length || closed) return
+    if (!soundHeard.size) { soundKept.push(...list); return }
+    const told = { sound: JSON.stringify(list) }
+    for (const fn of soundHeard) fn(told)
+  }
+  function hearSound(events) {
+    const list = []
+    for (const e of Array.isArray(events) ? events : [events]) {
+      if (!e || typeof e !== 'object') continue
+      if (e.type === 'microphone') micSaid = e
+      if (e.type === 'saved') {
+        const { bytes, ...rest } = e
+        const to = saving.get(e.ask)
+        saving.delete(e.ask)
+        const data = bytes ? (bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)) : null
+        if (to === 'python' && data) rest.bytes = base64Of(data)
+        else if (typeof to === 'function' && data) { try { to({ name: e.name, bytes: data, type: 'audio/wav' }) } catch (err) { console.warn(`${e.name} could not be saved (${(err && err.message) || err})`) } }
+        list.push(rest)
+      } else list.push(e)
+    }
+    tellSound(list)
+  }
+  const joinSound = (from) => { if (!soundLeave && from && typeof from.onSoundEvents === 'function') soundLeave = from.onSoundEvents(hearSound, scope) || (() => {}) }
+  if (elsewhere) joinSound(host)
+  // Where a file that save_sound made goes when Python did not ask for it: see A SAVED FILE.
+  const keeper = () => (typeof keep === 'function' ? keep : files && files.hostKeepsBytes ? (file) => files.raw(file.name, file.bytes) : null)
 
   function load() {
     if (!loading) {
@@ -1001,6 +1058,9 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       const transport = midi !== undefined ? midi : host.midi
       if (transport !== undefined) options.midi = transport
       if (host.midiSysex) options.midiSysex = true
+      // The microphone: a host's own stream or pushed frames, or false for none. Without it the browser is asked.
+      const mic = microphone !== undefined ? microphone : host.microphone
+      if (mic !== undefined) options.microphone = mic
       if (host.midiModule) options.midiModule = host.midiModule
       else if (inl && inl.synths && inl.synths.midi) options.midiModule = URL.createObjectURL(new Blob([inl.synths.midi], { type: 'text/javascript' }))
       mine.player = mod.createPlayer(options)
@@ -1009,6 +1069,7 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
     pagePlayer.heard.add(hear)
     player = pagePlayer.player
     joinMidi(player)
+    joinSound(player)
     if (player.state === 'waiting' || player.state === 'on') hear(player.state)
     if (paused) quiet(true)
   }
@@ -1028,11 +1089,30 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   const own = (c) => { c.t = clock(); remember(c); out({ synths: 1, scope, now: c.t, cmds: [c] }) }
 
   function remember(c) {
-    if (c.op === 'synth') synths.set(c.id, { preset: c.preset || null, set: Object.entries(c.set || {}) })
-    else if (c.op === 'set' && c.set) {
+    if (c.op === 'synth') {
+      synths.set(c.id, { preset: c.preset || null, set: [] })
+      if (c.voice != null) wear(c.id, c.voice)
+      synths.get(c.id).set.push(...Object.entries(c.set || {}))
+    } else if (c.op === 'set' && (c.set || c.voice != null)) {
       if (!synths.has(c.id)) synths.set(c.id, { preset: 'keys', set: [] })
-      synths.get(c.id).set.push(...Object.entries(c.set))
-    } else if (c.op === 'master') {
+      if (c.voice != null) wear(c.id, c.voice)
+      if (c.set) synths.get(c.id).set.push(...Object.entries(c.set))
+    } else if (c.op === 'mic') {
+      // The microphone is a synth by its id, which starts with nothing set: it comes through untouched.
+      if (c.do === 'close') { mics.delete(c.id); return }
+      if (!mics.has(c.id) || !synths.has(c.id)) synths.set(c.id, { preset: null, set: [], mic: true })
+      mics.add(c.id)
+      if (!micAsked) { micAsked = true; if (state === 'waiting') hear(state) }
+      const mine = synths.get(c.id)
+      if (c.voice != null) wear(c.id, c.voice)
+      if (c.set) mine.set.push(...Object.entries(c.set))
+      if (c.listen != null) mine.listening = !!c.listen
+    } else if (c.op === 'save' && !elsewhere) {
+      // A file: Python's when it asked for the bytes, else this scene's to keep, else the player's to download.
+      if (c.download === false) saving.set(c.ask, 'python')
+      else if (keeper()) { saving.set(c.ask, keeper()); c.download = false }
+    } else if (c.op === 'save' && c.download === false) saving.set(c.ask, 'python')
+    else if (c.op === 'master') {
       if (typeof c.volume === 'number') volume = c.volume
       if (c.set) shared.push(...Object.entries(c.set))
     }
@@ -1045,7 +1125,11 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   function settings() {
     if (!table && mod && mod.describe) {
       const d = mod.describe(), byName = new Map()
-      table = { names: new Map(), synths: d.synths || {}, plain: d.plain || {}, words: d.choiceWords || {} }
+      table = { names: new Map(), synths: d.synths || {}, plain: d.plain || {}, words: d.choiceWords || {}, voices: {}, voiced: [], mic: (d.microphone && d.microphone.names) || {} }
+      for (const name in d.voices || {}) {
+        table.voices[name] = d.voices[name].values || {}
+        for (const setting in table.voices[name]) if (!table.voiced.includes(setting)) table.voiced.push(setting)
+      }
       for (const entry of d.settings || []) { byName.set(entry.name, entry); table.names.set(nameKey(entry.name), { entry, scale: 1 }) }
       for (const alias in d.names || {}) {
         const entry = byName.get(d.names[alias].setting)
@@ -1095,16 +1179,61 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   }
   const reading = (id) => (player && player.read ? player.read(id, scope) : elsewhere && typeof host.read === 'function' ? host.read(id, scope) : null) || NO_READING
 
-  function synth(id) {
-    const lists = () => {
-      const t = settings(), mine = synths.get(id)
-      return t ? [Object.entries(t.plain), Object.entries((mine && t.synths[mine.preset]) || {}), mine ? mine.set : []] : []
+  // What has been asked of a synth, oldest first: the plain settings, its ready-made synth's, and its own.
+  const listsOf = (id) => {
+    const t = settings(), mine = synths.get(id)
+    return !t ? [] : mine && mine.mic ? [mine.set] : [Object.entries(t.plain), Object.entries((mine && t.synths[mine.preset]) || {}), mine ? mine.set : []]
+  }
+  // A VOICE is put on as the player puts it on (synths.js's wearVoice; the rule is in its docs/commands.md under
+  // `set`), so what a dial reads after `mic.voice = "robot"` is what the engine has: the first voice remembers what
+  // its settings were, each one after puts those back before its own, and "none" forgets them.
+  function wear(id, voice) {
+    const t = settings(), mine = synths.get(id)
+    if (!mine) return
+    const last = mine.voice || 'none'
+    mine.voice = voice
+    if (!t) return
+    const row = t.voices[voice] || {}, was = t.voices[last] || {}
+    const raw = (name, lists) => { const at = t.names.get(nameKey(name)); let v; if (at) for (const list of lists) { const x = lastOf(list, at.entry); if (x !== undefined) v = x } return v }
+    const whole = (name) => { const at = t.names.get(nameKey(name)); return !!at && at.entry.scope === 'all' }
+    if (!mine.under) {
+      mine.under = {}
+      for (const name of t.voiced) { const v = raw(name, whole(name) ? [shared] : listsOf(id)); if (v !== undefined) mine.under[name] = v }
     }
+    for (const name of t.voiced) {
+      const at = t.names.get(nameKey(name))
+      if (!at || (whole(name) && !(name in row) && !(name in was))) continue
+      const value = name in row ? row[name] : name in mine.under ? mine.under[name] : at.entry.default
+      ;(whole(name) ? shared : mine.set).push([name, value])
+    }
+    if (voice === 'none') mine.under = null
+  }
+
+  function synth(id) {
+    const lists = () => listsOf(id)
+    const isMic = () => mics.has(id)
+    // The microphone's settings go by its own names (its `pitch` is the pitch shifter).
+    const named = (name) => { const t = isMic() && settings(); const to = t && t.mic[nameKey(name)]; return to || name }
+    const voices = () => { const t = settings(); return ['none', ...(t ? Object.keys(t.voices) : [])] }
+    const special = (name) => { const k = nameKey(name); return k === 'voice' || (k === 'listening' && isMic()) ? k : '' }
     return {
       id,
-      describe: (name) => describe(name),
-      get: (name) => valueOf(lists(), name),
-      set: (name, value) => own({ op: 'set', id, set: { [name]: value } }),
+      describe: (name) => (special(name) === 'voice' ? { name: 'voice', kind: 'choice', min: 0, max: voices().length - 1, default: 'none', choices: voices() }
+        : special(name) === 'listening' ? { name: 'listening', kind: 'bool', min: 0, max: 1, default: false } : describe(named(name))),
+      get: (name) => (special(name) === 'voice' ? (synths.get(id) || {}).voice || 'none' : special(name) === 'listening' ? !!(synths.get(id) || {}).listening : valueOf(lists(), named(name))),
+      set: (name, value) => {
+        // A control gives a choice as its number in the list, and a switch as 1 or 0.
+        if (special(name) === 'voice') return own({ op: 'set', id, voice: typeof value === 'number' ? voices()[value] || 'none' : String(value) })
+        if (special(name) === 'listening') return own({ op: 'mic', id, listen: value === true || value === 1 || value === 'on' })
+        const set = { [named(name)]: value }
+        if (isMic()) {
+          const k = nameKey(name)
+          if (k === 'gate' && (value === false || value === 'off' || value === null)) set[named(name)] = -100
+          // The microphone starts with no filter. Turning the cutoff asks for one.
+          if ((k === 'cutoff' || k === 'resonance') && valueOf(lists(), 'filter') === 'off') set.filter = 'lowpass'
+        }
+        return own({ op: 'set', id, set })
+      },
       noteOn: (note, velocity = 0.8) => own({ op: 'note', id, note: [note], len: null, vel: velocity }),
       noteOff: (note) => own({ op: 'off', id, note: [note] }),
       samples: () => reading(id).samples,
@@ -1139,6 +1268,36 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       midiHeard.add(fn)
       if (devicesSaid) fn({ midi: JSON.stringify([devicesSaid]) })
     },
+    /** Python asks for what the player says back, and for what it watches: fn({ sound: a list of events as JSON text }). */
+    events(fn) {
+      if (typeof fn !== 'function') return
+      soundHeard.add(fn)
+      const kept = soundKept.length ? soundKept : micSaid ? [micSaid] : []
+      soundKept = []
+      if (kept.length) fn({ sound: JSON.stringify(kept) })
+    },
+    /** Python reads a synth back (no id: all the sound): said with every frame until it has not asked for a second and a half. */
+    watch(id) { watched.set(typeof id === 'string' ? id : '', clock() + 1.5) },
+    watchSong() { watched.set('song\u0001', clock() + 1.5) },
+    /** Called as a frame is about to be asked of Python: what is watched goes with it. */
+    frame() {
+      if (!watched.size || closed) return
+      const now = clock(), list = []
+      for (const [id, until] of watched) {
+        if (until < now) { watched.delete(id); continue }
+        if (id === 'song\u0001') {
+          const from = player && player.songPosition ? player : elsewhere && typeof host.songPosition === 'function' ? host : null
+          if (from) list.push({ type: 'position', ...from.songPosition() })
+          continue
+        }
+        const r = reading(id || undefined), samples = new Array(r.samples.length)
+        for (let i = 0; i < samples.length; i++) samples[i] = Math.round(r.samples[i] * 1000) / 1000
+        list.push({ type: 'reading', id: id || null, samples, level: [r.level[0] || 0, r.level[1] || 0], notes: Array.from(r.notes || []) })
+      }
+      tellSound(list)
+    },
+    /** Whether the scene has asked for the microphone. */
+    get microphone() { return micAsked },
     /** What a synth is doing now, { samples, level: [left, right], notes }; with no id, all of this scene's sound and everyone's. */
     read: reading,
     scope,
@@ -1163,6 +1322,8 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       closed = true
       if (midiLeave) midiLeave()
       midiHeard.clear()
+      if (soundLeave) soundLeave()
+      soundHeard.clear()
       if (player && pagePlayer && pagePlayer.player === player) {
         pagePlayer.heard.delete(hear)
         if (--pagePlayer.users <= 0) { player.close(); pagePlayer = null }
@@ -1616,6 +1777,7 @@ let activeScene = null
  *   makeTransport  a function that makes a fresh transport for each run
  *   storage     where the scene's files and databases are kept, from a host (see sceneFiles)
  *   sound       how the scene's sound is played, from a host (see soundKeeper)
+ *   microphone  a host's own microphone (a stream, pushed frames, or false), and `save`, where save_sound's files go
  *   dials       dials.js from a host: the module, a promise of it, or its address
  */
 export class Scene {
@@ -1785,11 +1947,13 @@ export class Scene {
       this.el.insertBefore(this.canvas, this.el.firstChild)
       this.canvas.addEventListener('pointerdown', () => { activeScene = this })
       this.canvas.addEventListener('focus', () => { activeScene = this })
-      const waiting = 'Click, tap or press a key to turn the sound on'
+      // A browser keeps a page silent until it has been touched: say so over the scene, until it has been. The
+      // microphone is asked for at once, without waiting for that, but is neither heard nor recorded until then.
+      const waiting = ['Click, tap or press a key to turn the sound on', 'Click, tap or press a key to turn the sound and the microphone on']
       this.sound = soundKeeper({
         host: this.opt.sound, src: this.opt.src, module: libs.synths, midi: this.opt.midi,
-        // A browser keeps a page silent until it has been touched: say so over the scene, until it has been.
-        onState: (state) => { if (token === r.token && (state === 'waiting' || (this.coverEl && this.coverEl.textContent === waiting))) this.cover(state === 'waiting' ? waiting : '') },
+        microphone: this.opt.microphone, save: this.opt.save, files: this.files,
+        onState: (state) => { if (token === r.token && (state === 'waiting' || (this.coverEl && waiting.includes(this.coverEl.textContent)))) this.cover(state === 'waiting' ? waiting[this.sound && this.sound.microphone ? 1 : 0] : '') },
       })
       this.renderer = createRenderer(this.canvas, {
         sound: this.sound,
@@ -1996,6 +2160,8 @@ export class Scene {
       }
     }
     r.missedRefresh = false
+    // What Python reads back of the sound (a wave, a level, a song's place) goes with this frame.
+    if (this.sound) this.sound.frame()
     const payload = { dt, events: r.events, reads: r.reads, ...r.size, measure: r.measuring }
     r.events = []
     r.reads = {}
@@ -2120,6 +2286,11 @@ function serverMode() {
  * synths, wasm, worklet, latency, onState (see soundKeeper). `options.dials`: dials.js from a host.
  * `options.midi` (from a host): a MIDI transport for a browser with none, an object with open, inputs, outputs,
  * send, receive and changed (synths.js's docs/midi.md), or false for no MIDI. Without it the browser's Web MIDI is used.
+ * `options.microphone` (from a host): the microphone where the page cannot ask the browser for one (a frame with no
+ * origin, an app that owns the audio session): a MediaStream, a function that gives one, { open(wants), close() }
+ * whose open may push frames (synths.js's docs/microphone.md), or false for none. Without it the browser is asked
+ * when a scene first calls use_microphone(). `options.save(file)` is given { name, bytes, type } for each file
+ * save_sound() makes, in place of the scene's files (when `storage` has writeBytes) or a download.
  */
 export function mount(el, options = {}) {
   if (el.pycturesScene) return el.pycturesScene
@@ -2139,6 +2310,8 @@ export function mount(el, options = {}) {
     storage: options.storage,
     sound: options.sound,
     midi: options.midi,
+    microphone: options.microphone,
+    save: options.save,
     dials: options.dials,
   })
   return scene

@@ -187,6 +187,27 @@ keyboard(lead, octave=4)
 
 Both libraries come with Pyctures, and a page loads them only for a scene that uses them.
 
+
+## Sheet music
+
+A scene can write music out as notes on a staff, play it, and light each note as it sounds:
+
+```python
+from pyctures import *
+from pynotation import *
+
+page = show_notes("E4 D4 C4 D4 E4 E4 E4:2", "quarter")
+
+def on_mouse_down(x, y):
+    page.play()
+
+def draw():
+    background("midnightblue")
+    text("Click here to play", width / 2, height - 30, "white", 18, "centre")
+```
+
+Change the notes in the line and both what you hear and what you see change. A tracker song can be written out a staff a channel and followed as it plays, a sheet can be written a note at a time (`make_sheet()`), and a learner can play along on a keyboard (`page.play_along("wait")`, `keyboard(page)`): [Sheet music](docs/sheet-music.md).
+
 ## Scenes
 
 A file can be several scenes: a title screen, the game and a game-over screen, or the parts of a show on a timer. Each is a class with the same functions a file has, and starts empty.

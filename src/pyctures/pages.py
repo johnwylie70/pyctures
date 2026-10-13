@@ -33,6 +33,11 @@ ASSETS = {
     "scenes/pyscenes.py": WEB / "scenes" / "pyscenes.py",
     # A scene run one frame at a time for a recorder: loaded only by mount(el, { stepped }).
     "stepped/stepped.js": WEB / "stepped" / "stepped.js",
+    # Sheet music (`from pynotation import *`): a copy, loaded only for a scene that imports it.
+    "notation/notation.js": WEB / "notation" / "notation.js",
+    "notation/pynotation.py": WEB / "notation" / "pynotation.py",
+    "notation/LICENSE": WEB / "notation" / "LICENSE",
+    "notation/LICENSE-GLYPHS": WEB / "notation" / "LICENSE-GLYPHS",
 }
 
 # The libraries a scene asks for by importing them: the name it imports -> (its folder, the page's half,
@@ -41,6 +46,7 @@ LIBRARIES = {
     "synths": ("synths", "synths.js", "synths.py"),
     "pydials": ("dials", "dials.js", "pydials.py"),
     "pyscenes": ("scenes", "scenes.js", "pyscenes.py"),
+    "pynotation": ("notation", "notation.js", "pynotation.py"),
 }
 
 # Scenes are not imported: a file that names one is given them (the same words as pyctures.js and the Python half).
@@ -51,7 +57,9 @@ def uses_library(source, name):
     """Whether a scene imports a library (the same test the browser half makes)."""
     if name == "pyscenes":
         return USES_SCENES.search(source) is not None
-    return re.search(r"^[ \t]*(?:from|import)[ \t]+%s\b" % name, source, re.M) is not None
+    # (A scene with sheet music has the sound too: its music is played through it, and lit by its clock.)
+    names = "synths|pynotation" if name == "synths" else name
+    return re.search(r"^[ \t]*(?:from|import)[ \t]+(?:%s)\b" % names, source, re.M) is not None
 
 
 def scene_page(title, src, script, server=False, output="console", files=()):

@@ -12,7 +12,8 @@
  * commands the Python half (`pyctures/__init__.py`) records, answers reads, and
  * reports input. Fixed handles (they must match the Python half): 1 window,
  * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons,
- * 7 plain drawing, 8 saved values, 9 files and databases, 10 sound, 11 dials and other on-screen controls.
+ * 7 plain drawing, 8 saved values, 9 files and databases, 10 sound, 11 dials and other on-screen controls,
+ * 15 sheet music (12 is scenes; 13 and 14 are kept for effects and the sound button).
  *
  * SOUND AND DIALS are two libraries of their own (synths and dials), carried beside this file in
  * `synths/` and `dials/` and loaded only for a scene that uses them: see soundKeeper and dialsKeeper.
@@ -341,7 +342,7 @@ export function inputOf(source) {
  * onApplied({reads, errors, ms, n, timing}), onReads(reads) (a promise has
  * settled), isActive() (has the keyboard).
  */
-export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, sound = null, dials = null, scenes = null, hooks }) {
+export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, sound = null, dials = null, scenes = null, notation = null, hooks }) {
   const H = new Map()
   let ctx2d = null
   let dpr = 1, cssW = 0, cssH = 0
@@ -768,6 +769,9 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
       },
     })
   }
+  // SHEET MUSIC: Python's show_notes() and make_sheet() (the library pynotation), drawn by notation/notation.js.
+  const sheets = notation ? notation(canvas) : null
+  if (sheets) H.set(15, sheets)
   window.addEventListener('keydown', sendInput)
   window.addEventListener('keyup', sendInput)
   window.addEventListener('blur', sendInput)
@@ -840,6 +844,7 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
       window.removeEventListener('pointercancel', sendInput)
       for (const g of glRenderers) { try { g.dispose() } catch (e) { /* already gone */ } }
       if (panel) panel.close()
+      if (sheets) sheets.close()
       H.clear()
     },
   }
@@ -861,7 +866,8 @@ const NOTHING_TO_DO = ['free', 0, 0]
 export function usesLibrary(source, name) {
   const lib = LIBRARIES[name]
   if (lib && lib.uses) return lib.uses.test(source || '')
-  return new RegExp('^[ \\t]*(?:from|import)[ \\t]+' + name + '\\b', 'm').test(source || '')
+  // (A scene with sheet music has the sound too: its music is played through it, and lit by its clock.)
+  return new RegExp('^[ \\t]*(?:from|import)[ \\t]+(?:' + name + (name === 'synths' ? '|pynotation' : '') + ')\\b', 'm').test(source || '')
 }
 
 /**
@@ -871,6 +877,7 @@ export function usesLibrary(source, name) {
 export const LIBRARIES = {
   synths: { folder: 'synths', js: 'synths.js', py: 'synths.py' },
   pydials: { folder: 'dials', js: 'dials.js', py: 'pydials.py' },
+  pynotation: { folder: 'notation', js: 'notation.js', py: 'pynotation.py' },
   // Scenes are not imported: a file that names one (a class with Scene in its brackets, or a call of scene(), go(),
   // next_scene(), config() or section()) is given them. Python asks the same of the same text (_USES_SCENES), and so does `pyctures build`.
   pyscenes: { folder: 'scenes', js: 'scenes.js', py: 'pyscenes.py', uses: /(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|section)[ \t]*\()/m },
@@ -1422,6 +1429,15 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
     }),
     /** The player, once a sound has been asked for (null when a host takes the commands). */
     get player() { return player },
+    // For a library in the page that keeps time by the sound (sheet music). Is the sound on ('loading', 'waiting' for a
+    // tap, 'on')? Asking begins it. And Python's clock now, as the batches that have come give it (null before the first).
+    state() {
+      if (closed || elsewhere) return closed ? 'closed' : 'on'
+      if (!mod) { load(); return 'loading' }
+      if (!player) makePlayer()
+      return player.state
+    },
+    soundTime: () => (offset === null ? null : clock() - offset),
     /** Silence while the scene is out of view, with everything kept as it is. */
     pause() { if (!paused && used) quiet(true); paused = true },
     resume() { if (paused && used) quiet(false); paused = false },
@@ -1449,19 +1465,27 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
  * `pydials`, so it is there before the scene starts; otherwise it is loaded when the first control is asked
  * for, and what was asked of it meanwhile is done then. `given`: a host's copy (as for sound's `synths`).
  */
-function dialsKeeper({ given = null, module = null }) {
-  const made = (m, canvas) => { const api = m.dials(canvas, { fresh: true }); api.close = () => api.panel.close(); return api }
+function dialsKeeper(o) {
+  return libraryKeeper('pydials', 'The controls', o, (m, canvas) => { const api = m.dials(canvas, { fresh: true }); api.close = () => api.panel.close(); return api })
+}
+
+/**
+ * What a library's keeper gives a canvas: the library's own object for it (`made`) when its module is there
+ * already, and otherwise a stand-in that loads the library when it is first asked for anything, and does then
+ * what was asked of it meanwhile.
+ */
+function libraryKeeper(name, what, { given = null, module = null }, made) {
   return (canvas) => {
     if (module) return made(module, canvas)
     let api = null, closed = false
     const calls = []
     const call = (name, args) => { if (typeof api[name] === 'function') return api[name](...args) }
     const begin = () => {
-      begin.done = begin.done || loadLibrary('pydials', given).then((m) => {
+      begin.done = begin.done || loadLibrary(name, given).then((m) => {
         if (closed) return
         api = made(m, canvas)
         for (const [name, args] of calls.splice(0)) call(name, args)
-      }, (e) => { console.error('The controls could not load: ' + ((e && e.message) || e)) })
+      }, (e) => { console.error(what + ' could not load: ' + ((e && e.message) || e)) })
     }
     const close = () => { closed = true; if (api) api.close() }
     return new Proxy({}, {
@@ -1894,6 +1918,7 @@ let activeScene = null
  *   sound       how the scene's sound is played, from a host (see soundKeeper)
  *   microphone  a host's own microphone (a stream, pushed frames, or false), and `save`, where save_sound's files go
  *   dials       dials.js from a host: the module, a promise of it, or its address
+ *   notation    notation.js from a host, in the same three forms
  */
 export class Scene {
   constructor(el, options) {
@@ -2048,7 +2073,7 @@ export class Scene {
         if (!usesLibrary(source, name)) continue
         // A host that plays the sound itself needs synths.js here only for what a dial asks of a synth.
         if (name === 'synths' && typeof host.send === 'function' && !host.synths && !usesLibrary(source, 'pydials')) continue
-        try { libs[name] = await loadLibrary(name, name === 'synths' ? host.synths : name === 'pydials' ? this.opt.dials : this.opt.scenes) } catch (e) { this.log('err', `${name} could not load: ${(e && e.message) || e}`) }
+        try { libs[name] = await loadLibrary(name, name === 'synths' ? host.synths : name === 'pydials' ? this.opt.dials : name === 'pynotation' ? this.opt.notation : this.opt.scenes) } catch (e) { this.log('err', `${name} could not load: ${(e && e.message) || e}`) }
       }
       // Everything the scene has stored, to put in Python's file system before it starts.
       const stored = this.transport.keepsFiles ? await this.files.all() : []
@@ -2081,6 +2106,8 @@ export class Scene {
         sound: this.sound,
         scenes: this.stage,
         dials: dialsKeeper({ given: this.opt.dials, module: libs.pydials }),
+        // Sheet music (pynotation, handle 15) is given the scene's sound: it asks it whether the sound is on, and Python's clock.
+        notation: libraryKeeper('pynotation', 'Sheet music', { given: this.opt.notation, module: libs.pynotation }, (m, canvas) => m.notation(canvas, { fresh: true, sound: this.sound })),
         three: three && three.three,
         addons: three && three.addons,
         images: imageResolver(this.opt.src, inl && inl.files),
@@ -2440,6 +2467,7 @@ export function mount(el, options = {}) {
     microphone: options.microphone,
     save: options.save,
     dials: options.dials,
+    notation: options.notation,
   })
   // For a host that records the scene a frame at a time: `await scene.ready`, then `await scene.step()` for each frame.
   if (options.stepped) scene.ready = import(new URL('stepped/stepped.js', BASE)).then((m) => m.stepped(scene, options.stepped))

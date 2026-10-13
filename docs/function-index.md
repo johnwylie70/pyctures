@@ -595,7 +595,7 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `set_volume(v)`, `mute_sound()`, `unmute_sound()`, `stop_sound()` | All the sound |
 | `main_synth()`, `sound_output()` | The synth `play_note` uses, and all the sound together, for dials and scopes |
 | `sound_names()`, `synth_names()`, `setting_names()` | What there is |
-| `play_song(path)` | A tracker song: not ready yet |
+| `play_song(path)` | A song from a file (`.mod`, `.xm`): `.pause()`, `.resume()`, `.stop()` |
 
 ## Dials and a keyboard
 

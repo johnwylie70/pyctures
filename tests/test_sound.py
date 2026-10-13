@@ -46,7 +46,7 @@ SCENE = "document.querySelector('[data-pyctures-src]').pycturesScene"
 HEARD = """(id) => {
   const s = document.querySelector('[data-pyctures-src]').pycturesScene, p = s && s.sound && s.sound.player
   if (!p || !p.read) return { state: p ? p.state : null, level: 0, notes: [] }
-  const all = p.read(), one = p.read(id)
+  const all = p.read(), one = s.sound.read(id)
   return { state: p.state, kind: p.kind, level: Math.max(...all.level), wave: Math.max(0, ...Array.from(all.samples, Math.abs)), notes: Array.from(one.notes) }
 }"""
 # The controls on the scene, from the same dials.js the page loaded.
@@ -121,10 +121,10 @@ def test_the_libraries_carried_here_are_those_beside_this_repository():
     for (repo, name), copy in sync.COPIES.items():
         assert copy.is_file(), "%s is missing: run scripts/sync_libraries.py" % copy.name
         assert copy in pages.ASSETS.values(), "%s is not among the files a build is given" % copy.name
-        source = BESIDE / repo / name
-        if source.is_file():
+        source = sync.committed(BESIDE / repo, name) if (BESIDE / repo).is_dir() else None
+        if source is not None:
             compared += 1
-            assert copy.read_bytes() == source.read_bytes(), "%s differs from %s: run scripts/sync_libraries.py" % (copy.name, source)
+            assert copy.read_bytes() == source, "%s differs from %s/%s as last committed: run scripts/sync_libraries.py" % (copy.name, repo, name)
     if not compared:
         pytest.skip("the libraries are not beside this repository")
 
@@ -234,6 +234,42 @@ def draw():
     assert not w.errors, w.errors
 
 
+def test_two_scenes_on_a_page_share_one_player_and_keep_their_own_synths(browser, pyctures_run, tmp_path):
+    """Each scene chooses its own ids, so both have a synth "s1". They are one sound card, and stopping one leaves the other."""
+    for name, note in (("low.py", "C3"), ("high.py", "G5")):
+        write(tmp_path, 'from synths import *\nlead = make_synth("organ")\nlead.start("%s")\ndef draw():\n    background("black")\n' % note, name)
+    (tmp_path / "index.html").write_text(
+        '<!doctype html><html><body><div data-pyctures-src="low.py" style="height:200px"></div>'
+        '<div data-pyctures-src="high.py" style="height:200px"></div>'
+        '<script type="module" src="/pyctures/pyctures.js"></script></body></html>')
+    server = pyctures_run(tmp_path)
+    w = Watched(browser, server.url)
+    w.wait_running(2)
+    w.page.mouse.click(100, 100)
+    notes = "() => [...document.querySelectorAll('[data-pyctures-src]')].map((el) => Array.from(el.pycturesScene.sound ? el.pycturesScene.sound.read('s1').notes : []))"
+    wait_for(w.page, lambda: w.page.evaluate(notes) == [[48], [79]], "each scene's own note on its own s1")
+    assert w.page.evaluate("(() => { const [a, b] = [...document.querySelectorAll('[data-pyctures-src]')].map((el) => el.pycturesScene.sound); return a.player === b.player && a.scope !== b.scope })()")
+    w.page.evaluate("document.querySelector('[data-pyctures-src]').pycturesScene.stop()")
+    wait_for(w.page, lambda: w.page.evaluate(notes) == [[], [79]], "the first scene's note is gone, and the second's plays on")
+    assert not w.errors, w.errors
+
+
+def test_run_a_song_is_heard(browser, pyctures_run, tmp_path):
+    """A song in synths' own format, with the WAV files it names: Python has them, and sends them with it."""
+    import shutil
+    songs = BESIDE / "synths.js" / "examples" / "songs"
+    if not (songs / "night_drive.json").is_file():
+        pytest.skip("the example song of synths.js is not beside this repository")
+    shutil.copytree(songs, tmp_path / "songs")
+    server = pyctures_run(write(tmp_path, 'from synths import *\nsong = play_song("songs/night_drive.json")\ndef draw():\n    background("black")\n'))
+    w = Watched(browser, server.url)
+    asked = requests_of(w.page)
+    w.wait_running()
+    listen(w)
+    assert not [u for u in asked if "/songs/" in u], "nothing of the song was fetched: Python sent it"
+    assert not w.errors, w.errors
+
+
 # ---------------------------------------------------------------- the synth panel
 
 def drag_the_dial_and_play_a_key(w):
@@ -329,7 +365,7 @@ def draw():
       const at = { clientX: box.left + 30, clientY: box.bottom - 20, pointerId: 7, pointerType: 'mouse', button: 0, bubbles: true }
       const t0 = performance.now()
       canvas.dispatchEvent(new PointerEvent('pointerdown', at))
-      while (!p.read('s1').notes.includes(60) && performance.now() - t0 < 2000) await new Promise((r) => setTimeout(r, 5))
+      while (!s.sound.read('s1').notes.includes(60) && performance.now() - t0 < 2000) await new Promise((r) => setTimeout(r, 5))
       const ms = performance.now() - t0
       window.dispatchEvent(new PointerEvent('pointerup', at))
       return { ms, frames: s.r.sent - frames }
@@ -420,7 +456,7 @@ def test_a_host_takes_the_commands_on_the_page_s_clock(browser, pyctures_run, tm
     assert w.page.evaluate(SCENE + ".sound.player") is None
 
     first = got[0]["batch"]
-    assert first["synths"] == 1 and [c["op"] for c in first["cmds"]] == ["synth", "sample", "synth"]
+    assert first["synths"] == 1 and first["scope"] == "scene1" and [c["op"] for c in first["cmds"]] == ["synth", "sample", "synth"]
     assert first["cmds"][0] == {"op": "synth", "id": "s1", "preset": "lead", "set": {"cutoff": 900}, "t": first["cmds"][0]["t"]}
     assert first["cmds"][1]["bytes"] == "UklGRgQAAABXQVZF", "Python had the file, so it sent it"
     notes = []
@@ -445,9 +481,10 @@ def test_a_host_takes_the_commands_on_the_page_s_clock(browser, pyctures_run, tm
     for a in range(3, 5):
         assert (notes[a + 1][0] - notes[a][0]) == pytest.approx(asked_at[a + 1][0] - asked_at[a][0], abs=0.004)
 
-    # Stopping the scene tells the host to stop the sound.
+    # Stopping the scene tells the host that the scene's sound is finished with.
     w.page.evaluate(SCENE + ".stop()")
-    wait_for(w.page, lambda: w.page.evaluate("window.got[window.got.length - 1].batch.cmds[0].op") == "stop", "a stop for the host")
+    wait_for(w.page, lambda: w.page.evaluate("window.got[window.got.length - 1].batch.cmds[0].op") == "close", "a close for the host")
+    assert w.page.evaluate("window.got[window.got.length - 1].batch.scope") == "scene1"
 
 
 def beep(path, seconds=0.5, rate=22050):

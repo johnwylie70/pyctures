@@ -131,7 +131,7 @@ mount(el, {
   src: "game.py",
   sound: {
     send(batch) { port.postMessage(batch) },   // take the commands and play them somewhere else
-    read(id) { return latest.get(id) },        // with send: what a synth is doing, for scopes and meters
+    read(id, scope) { return latest(id, scope) },   // with send: what a synth is doing, for scopes and meters
     synths: import("./synths/synths.js"),      // synths.js itself: the module, a promise of it, or its address
     wasm: engineBytes,                         // the engine's bytes, for a page that may not fetch them
     worklet: "blob",                           // how the audio worklet is loaded: "blob", "file" or an address
@@ -141,9 +141,10 @@ mount(el, {
 })
 ```
 
-- **`send(batch)`** is handed every batch of commands, `{ synths: 1, now, cmds }`, in the format of synths.js ([its docs/commands.md](https://github.com/johnwylie70/synths.js/blob/main/docs/commands.md)). With it nothing is played here and no engine is loaded: play the batches with `createPlayer()` from synths.js wherever sound may be made (`player.send(batch)`), or with an engine of your own. When the scene stops you are sent `{ op: "stop" }`.
+- **`send(batch)`** is handed every batch of commands, `{ synths: 1, scope, now, cmds }`, in the format of synths.js ([its docs/commands.md](https://github.com/johnwylie70/synths.js/blob/main/docs/commands.md)). With it nothing is played here and no engine is loaded: play the batches with `createPlayer()` from synths.js wherever sound may be made (`player.send(batch)`), or with an engine of your own.
+- **`scope`** names the scene a batch is from (`"scene1"`, `"scene2"`), because each scene chooses its own ids: one player can play them all. A scene out of view sends `{ op: "master", pause: true }` in its scope, and a scene that stops sends `{ op: "close" }`.
 - **One clock.** Every time in a batch is on the page's clock, `performance.now() / 1000`, whether the command came from Python (whose own clock may be another computer's) or from a key or a dial on the page. `now` is that clock when the batch was handed over.
-- **`read(id)`** gives `{ samples, level: [left, right], notes }` for one synth, or for all the sound when there is no id, as `player.read(id)` does. Without it scopes and meters stay flat.
+- **`read(id, scope)`** gives `{ samples, level: [left, right], notes }` for one synth, or for all the sound when there is no id, as `player.read(id, scope)` does. Without it scopes and meters stay flat.
 - **Without `send`** the page plays the sound itself, and `synths`, `wasm` and `worklet` say where its parts come from, so a page that may fetch nothing (a sandboxed frame) still has sound. They are `createPlayer`'s options. `dials`, beside `sound`, is `dials.js` in the same way: the module, a promise of it, or its address.
 - **No `eval` is needed**, for sound or for dials. A page's policy has to allow `'wasm-unsafe-eval'` (the engine is WebAssembly) and, for the worklet from a Blob, `blob:` in `script-src`; `worklet: "file"` loads `synths-worklet.js` by its address instead.
 

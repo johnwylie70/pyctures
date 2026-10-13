@@ -891,6 +891,11 @@ async function pythonLibraries(source, files) {
   return out
 }
 
+// ONE PLAYER FOR THE PAGE. Every scene on a page shares one sound card and one engine, each in a scope of its
+// own (its own ids, pause and stop): { player, users, made, heard: the scenes to tell of its state }.
+let pagePlayer = null
+let soundScopes = 0
+
 const base64Bytes = (text) => Uint8Array.from(atob(text), (ch) => ch.charCodeAt(0))
 const nameKey = (name) => String(name).toLowerCase().replace(/[_.\s-]/g, '')
 const SOUND_UNITS = { hz: 'Hz', seconds: 's', semitones: 'st', cents: 'ct', octaves: 'oct' }
@@ -907,13 +912,17 @@ const NO_READING = { samples: [], level: [0, 0], notes: [] }
  * the two clocks; every command is moved onto the PAGE's clock (performance.now() / 1000) before it goes on.
  * So the player, or a host, sees one clock, whether a command came from Python or from a key on the page.
  *
+ * A SCOPE. Every batch names the scene it is from (`scope`), because the scenes of a page share one player and
+ * each chooses its own ids: two scenes may both have a synth "s1". A scene out of view is paused in its scope,
+ * and a scene that stops closes it.
+ *
  * `synth(id)` is the page's own object for one of Python's synths, with what dials.js looks for in a
  * target: set, get, describe, noteOn, noteOff, samples, level and notes. A dial or a piano key in the page
  * acts on it here, at once, and Python is only told afterwards. `output()` is the same for all the sound.
  *
  * `host` is the `sound` option of mount(), from an app that shows scenes; every part of it is optional:
  *   send(batch)       take the commands and play them somewhere else. Nothing is played or loaded here
- *   read(id)          with send: what a synth is doing, { samples, level, notes }, for scopes and meters
+ *   read(id, scope)   with send: what a synth is doing, { samples, level, notes }, for scopes and meters
  *   synths            synths.js itself: the module, a promise of it, or its address (a page that may not fetch)
  *   wasm, worklet     the engine's bytes and how its worklet is loaded: createPlayer's options of those names
  *   latency           seconds everything is played ahead: createPlayer's
@@ -926,6 +935,8 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
   host = host || {}
   const clock = () => performance.now() / 1000
   const elsewhere = typeof host.send === 'function'
+  const scope = 'scene' + ++soundScopes
+  const hear = (state) => { if (onState) onState(state); if (host.onState) host.onState(state) }
   let mod = module, player = null, loading = null, closed = false, paused = false
   let offset = null, last = 0, used = false
   let held = []                // batches that came before synths.js had loaded
@@ -946,16 +957,26 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
   }
 
   function makePlayer() {
-    const inl = inline()
-    const packed = inl && inl.synths && inl.synths.wasm
-    const options = { onState: (state) => { if (onState) onState(state); if (host.onState) host.onState(state) } }
-    if (host.wasm) options.wasm = host.wasm
-    else if (packed) { options.wasm = base64Bytes(packed); options.worklet = 'blob' }
-    if (host.worklet) options.worklet = host.worklet
-    if (host.latency != null) options.latency = host.latency
-    player = mod.createPlayer(options)
-    if (paused) player.pause()
+    if (!pagePlayer || pagePlayer.player.state === 'closed' || pagePlayer.player.state === 'failed') {
+      // The first scene to make a sound makes the player, with what its host gave it.
+      const inl = inline()
+      const packed = inl && inl.synths && inl.synths.wasm
+      const mine = pagePlayer = { player: null, users: 0, heard: new Set() }
+      const options = { onState: (state) => { for (const tell of mine.heard) tell(state) } }
+      if (host.wasm) options.wasm = host.wasm
+      else if (packed) { options.wasm = base64Bytes(packed); options.worklet = 'blob' }
+      if (host.worklet) options.worklet = host.worklet
+      if (host.latency != null) options.latency = host.latency
+      mine.player = mod.createPlayer(options)
+    }
+    pagePlayer.users++
+    pagePlayer.heard.add(hear)
+    player = pagePlayer.player
+    if (player.state === 'waiting' || player.state === 'on') hear(player.state)
+    if (paused) quiet(true)
   }
+  // This scene alone goes quiet, or comes back, with everything kept as it is.
+  const quiet = (on) => { const t = clock(); out({ synths: 1, scope, now: t, cmds: [{ op: 'master', pause: on, t }] }) }
 
   // A batch, on the page's clock, to whoever plays it.
   function out(batch) {
@@ -967,7 +988,7 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
     player.send(batch)
   }
   // One command from the page itself (a key, a dial), now.
-  const own = (c) => { c.t = clock(); remember(c); out({ synths: 1, now: c.t, cmds: [c] }) }
+  const own = (c) => { c.t = clock(); remember(c); out({ synths: 1, scope, now: c.t, cmds: [c] }) }
 
   function remember(c) {
     if (c.op === 'synth') synths.set(c.id, { preset: c.preset || null, set: Object.entries(c.set || {}) })
@@ -1035,7 +1056,7 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
     if (entry.choices) { d.choices = [...entry.choices]; d.default = entry.default }
     return d
   }
-  const reading = (id) => (player && player.read ? player.read(id) : elsewhere && typeof host.read === 'function' ? host.read(id) : null) || NO_READING
+  const reading = (id) => (player && player.read ? player.read(id, scope) : elsewhere && typeof host.read === 'function' ? host.read(id, scope) : null) || NO_READING
 
   function synth(id) {
     const lists = () => {
@@ -1072,9 +1093,12 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
         if (typeof c.url === 'string') c.url = beside(c.url)
         remember(c)
       }
-      out({ synths: batch.synths || 1, now: here, cmds: batch.cmds })
+      out({ synths: batch.synths || 1, scope, now: here, cmds: batch.cmds })
     },
     synth,
+    /** What a synth is doing now, { samples, level: [left, right], notes }; with no id, all of this scene's sound and everyone's. */
+    read: reading,
+    scope,
     /** All the sound together: its volume and the shared effects to set, and what it is doing to read. */
     output: () => ({
       describe: (name) => (nameKey(name) === 'volume' ? { name: 'volume', kind: 'float', min: 0, max: 2, default: 1 } : describe(name, 'all')),
@@ -1087,13 +1111,17 @@ function soundKeeper({ host = null, src = '', module = null, onState = null }) {
     /** The player, once a sound has been asked for (null when a host takes the commands). */
     get player() { return player },
     /** Silence while the scene is out of view, with everything kept as it is. */
-    pause() { paused = true; if (player) player.pause() },
-    resume() { paused = false; if (player) player.resume() },
+    pause() { if (!paused && used) quiet(true); paused = true },
+    resume() { if (paused && used) quiet(false); paused = false },
     close() {
       if (closed) return
-      if (elsewhere && used) host.send({ synths: 1, now: clock(), cmds: [{ op: 'stop', t: clock() }] })
+      // Everything of this scene is stopped and forgotten; the player goes when its last scene does.
+      if (used) out({ synths: 1, scope, now: clock(), cmds: [{ op: 'close', t: clock() }] })
       closed = true
-      if (player) player.close()
+      if (player && pagePlayer && pagePlayer.player === player) {
+        pagePlayer.heard.delete(hear)
+        if (--pagePlayer.users <= 0) { player.close(); pagePlayer = null }
+      }
     },
   }
 }

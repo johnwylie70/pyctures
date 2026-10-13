@@ -1,6 +1,6 @@
 # Sound and music
 
-A scene can make sound: a game sound where something happens, a note, a tune that goes round, a synth you shape yourself. The sound library is called **synths**, and it comes with Pyctures. One line at the top of the scene brings its functions in:
+A scene can make sound: a game sound where something happens, a note, a tune that goes round, a synth you shape yourself, a whole song from a file. The sound library is called **synths**, and it comes with Pyctures. One line at the top of the scene brings its functions in:
 
 ```python
 from synths import *
@@ -150,7 +150,18 @@ A scene that scrolls out of view, or whose tab is hidden, goes quiet until it is
 
 ## Songs
 
-`play_song("tune.mod")` is for tracker songs (`.mod`, `.xm`). It is **not ready yet**: today it plays nothing and says so once, and the rest of your sound is not affected.
+A song is a whole piece of music in one file, played by the sound engine itself: a tracker's `.mod` or `.xm` file, or a song in synths' own format.
+
+```py
+song = play_song("tune.mod")          # it goes round and round until it is stopped
+
+song.pause()
+song.resume()
+song.volume = 0.5
+song.stop()
+```
+
+`play_song("tune.xm", repeat=False)` plays it once. One song plays at a time, and your own notes and game sounds play over it. It starts at the first tap, like a tune.
 
 ## Mistakes
 

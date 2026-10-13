@@ -36,6 +36,11 @@ Command shape (the contract with ``web/pyctures.js``). Every command is
 
 Values: plain JSON, or {"$h": h}, {"$e": expr}, {"$cb": id}, {"$d": {...}}.
 
+SOUND AND DIALS are libraries of their own, ``synths`` and ``pydials``, which a
+scene imports. Each records its commands here as drawing does, against a fixed
+handle (H_SOUND, H_DIALS), so they ride the frame's message: a frame's sounds
+are ONE command, ``send(batch)``, timed on Python's clock (see ``_State.ending``).
+
 The host calls ``start(source, info_json)`` once, then ``tick(payload_json)``
 once per frame, and ``stop()``. Each returns a JSON reply:
 ``{"cmds", "out", "err", "running", "error", "errorLine"}``.
@@ -52,6 +57,8 @@ H_WINDOW, H_CANVAS, H_THREE, H_CTX, H_ADDONS = 1, 2, 3, 4, 5
 H_DRAW = 7   # the page's plain drawing functions (6 is taken where Pyctures is built into an editor)
 H_SAVED = 8  # the page's keeper of saved values
 H_FILES = 9  # the page's keeper of files and databases
+H_SOUND = 10     # the page's sound: `from synths import *` sends it a frame's sounds as one command, send(batch)
+H_DIALS = 11     # the page's dials, sliders and piano keys: `from pydials import *` makes each with one command
 
 
 class _State:
@@ -77,6 +84,7 @@ class _State:
         self.page_files = False  # files live in the page's storage: each one written is sent to it
         self.files_dir = ""      # where the page put this scene's stored files (a browser); "" is the scene's folder
         self.databases = []      # every database that is open
+        self.ending = []         # functions called as a frame is sent (a library that sends once a frame, as synths does)
 
 
 # WHICH RUN A THREAD IS WORKING FOR. A host may run every frame as its own
@@ -1665,6 +1673,8 @@ def _format_error(e):
 def _reply(error=None, error_line=0):
     for db in S.databases:
         _keep_database(db)   # once a frame, however many statements it ran
+    for end in S.ending:
+        end()
     cmds, S.cmds = S.cmds, []
     out = S.out.getvalue()
     err = S.err.getvalue()

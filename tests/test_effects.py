@@ -28,7 +28,7 @@ READ = """() => new Promise((done) => { const pipe = %s; pipe.api.onFrame((fx) =
 @pytest.fixture(scope="module")
 def browser():
     with sync_api.sync_playwright() as p:
-        b = p.chromium.launch(args=["--mute-audio"])
+        b = p.chromium.launch(args=["--mute-audio", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"])
         yield b
         b.close()
 

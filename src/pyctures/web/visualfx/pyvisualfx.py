@@ -250,7 +250,8 @@ def _frame():
         dt = _run.dt
     # A frame that is not one of the clock's (the page asked for a picture again) moves nothing on.
     _run.dt = None
-    if isinstance(dt, (int, float)) and dt > 0:
+    # What a file draws as it starts is a frame too, given no time (dt is 0): the effects are run on it, and nothing moves on.
+    if isinstance(dt, (int, float)) and dt >= 0:
         _run.api.frame(dt)
 
 

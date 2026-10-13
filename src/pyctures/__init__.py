@@ -93,7 +93,7 @@ class _State:
         self.ending = []         # functions called as a frame is sent (a library that sends once a frame, as synths does)
         self.scenes = None       # what the library pyscenes keeps for this run, for a file that names a scene
         self.stage = None        # its director, once the file has defined a scene: each frame tests this and no more
-        self.vt = None           # the scene's time in seconds while a recorder gives it one frame at a time, else None
+        self.vt = None           # the scene's time in seconds while a recorder steps it, else None
 
 
 # WHICH RUN A THREAD IS WORKING FOR. A host may run every frame as its own
@@ -176,9 +176,8 @@ class _Read:
 
 
 def _clock():
-    """The scene's clock. A page that records the scene as a video gives it one frame at a time, each exactly
-    1/fps after the last however long it took to draw, and says what time that is (`vt`, in start()'s info and
-    with every frame): then that is the time, for sleep() here and for the sound (synths reads S.vt)."""
+    """The scene's clock: the recorder's (`vt`, said at the start and with every frame) while the scene is
+    recorded a frame at a time, for sleep() here and for the sound (synths reads S.vt)."""
     vt = S.vt
     return time.monotonic() if vt is None else vt
 
@@ -1848,7 +1847,6 @@ def start(source, info_json):
     S.busy = True
     S.started = time.monotonic()
     info = json.loads(info_json)
-    # Recorded a frame at a time: the page says the scene's time, which begins at its `vt`.
     S.vt = float(info["vt"]) if isinstance(info.get("vt"), (int, float)) else None
     S.measuring = bool(info.get("measure"))
     saved = info.get("saved")

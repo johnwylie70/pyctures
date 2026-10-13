@@ -12,7 +12,7 @@
  * commands the Python half (`pyctures/__init__.py`) records, answers reads, and
  * reports input. Fixed handles (they must match the Python half): 1 window,
  * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons,
- * 7 plain drawing, 8 saved values, 9 files and databases, 10 sound, 11 dials and other on-screen controls, 15 sheet music.
+ * 7 plain drawing, 8 saved values, 9 files and databases, 10 sound, 11 dials and other on-screen controls, 12 scenes, 13 effects, 15 sheet music.
  *
  * SOUND AND DIALS are two libraries of their own (synths and dials), carried beside this file in
  * `synths/` and `dials/` and loaded only for a scene that uses them: see soundKeeper and dialsKeeper.
@@ -341,7 +341,7 @@ export function inputOf(source) {
  * onApplied({reads, errors, ms, n, timing}), onReads(reads) (a promise has
  * settled), isActive() (has the keyboard).
  */
-export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, sound = null, dials = null, scenes = null, notation = null, hooks }) {
+export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, sound = null, dials = null, scenes = null, notation = null, effects = null, hooks }) {
   const H = new Map()
   let ctx2d = null
   let dpr = 1, cssW = 0, cssH = 0
@@ -771,6 +771,9 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   // SHEET MUSIC (the library pynotation).
   const sheets = notation ? notation(canvas) : null
   if (sheets) H.set(15, sheets)
+  // EFFECTS (pyvisualfx): frame(dt) is run when the batch is done.
+  const fx = effects ? effects(canvas) : null
+  if (fx) H.set(13, new Proxy({}, { has: () => true, get: (_, n) => (n === 'frame' ? (dt) => queueMicrotask(() => fx.frame(dt)) : (...a) => fx[n](...a)) }))
   window.addEventListener('keydown', sendInput)
   window.addEventListener('keyup', sendInput)
   window.addEventListener('blur', sendInput)
@@ -844,6 +847,7 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
       for (const g of glRenderers) { try { g.dispose() } catch (e) { /* already gone */ } }
       if (panel) panel.close()
       if (sheets) sheets.close()
+      if (fx) fx.close()
       H.clear()
     },
   }
@@ -877,6 +881,7 @@ export const LIBRARIES = {
   synths: { folder: 'synths', js: 'synths.js', py: 'synths.py' },
   pydials: { folder: 'dials', js: 'dials.js', py: 'pydials.py' },
   pynotation: { folder: 'notation', js: 'notation.js', py: 'pynotation.py' },
+  pyvisualfx: { folder: 'visualfx', js: 'visualfx.js', py: 'pyvisualfx.py' },
   // Scenes are not imported: a file that names one (a class with Scene in its brackets, or a call of scene(), go(),
   // next_scene(), config() or section()) is given them. Python asks the same of the same text (_USES_SCENES), and so does `pyctures build`.
   pyscenes: { folder: 'scenes', js: 'scenes.js', py: 'pyscenes.py', uses: /(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|section)[ \t]*\()/m },
@@ -2067,7 +2072,7 @@ export class Scene {
         if (!usesLibrary(source, name)) continue
         // A host that plays the sound itself needs synths.js here only for what a dial asks of a synth.
         if (name === 'synths' && typeof host.send === 'function' && !host.synths && !usesLibrary(source, 'pydials')) continue
-        try { libs[name] = await loadLibrary(name, name === 'synths' ? host.synths : name === 'pydials' ? this.opt.dials : name === 'pynotation' ? this.opt.notation : this.opt.scenes) } catch (e) { this.log('err', `${name} could not load: ${(e && e.message) || e}`) }
+        try { libs[name] = await loadLibrary(name, name === 'synths' ? host.synths : name === 'pydials' ? this.opt.dials : name === 'pynotation' ? this.opt.notation : name === 'pyscenes' ? this.opt.scenes : null) } catch (e) { this.log('err', `${name} could not load: ${(e && e.message) || e}`) }
       }
       // Everything the scene has stored, to put in Python's file system before it starts.
       const stored = this.transport.keepsFiles ? await this.files.all() : []
@@ -2101,6 +2106,7 @@ export class Scene {
         scenes: this.stage,
         dials: dialsKeeper({ given: this.opt.dials, module: libs.pydials }),
         notation: libraryKeeper('pynotation', 'Sheet music', { given: this.opt.notation, module: libs.pynotation }, (m, canvas) => m.notation(canvas, { fresh: true, sound: this.sound })),
+        effects: libs.pyvisualfx && ((canvas) => libs.pyvisualfx.effects(canvas, { fresh: true, manual: true, sound: () => this.sound && this.sound.output && this.sound.output(), under: () => this.stage && this.stage.running && this.stage.running.layer })),
         three: three && three.three,
         addons: three && three.addons,
         images: imageResolver(this.opt.src, inl && inl.files),

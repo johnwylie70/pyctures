@@ -533,7 +533,7 @@ def _doc_programs():
     from conftest import ROOT
     found = []
     for doc in ("README.md", "docs/from-javascript.md", "docs/getting-started.md", "docs/website.md",
-                "docs/sound.md", "docs/dials.md", "docs/sheet-music.md"):
+                "docs/sound.md", "docs/dials.md", "docs/sheet-music.md", "docs/effects.md"):
         blocks = re.findall(r"```python\n(.*?)```", (ROOT / doc).read_text(), re.S)
         for i, code in enumerate(blocks):
             # A fragment that leans on names made elsewhere (the README's
@@ -555,4 +555,4 @@ def test_docs_python_runs(browser, pyctures_run, tmp_path, name, code):
     p = pyctures_run(scene)
     w = Watched(browser, p.url)
     # A scene that only makes controls draws nothing of its own: they are on a layer over it.
-    w.check("docs-%s.png" % name, min_colours=1 if "from pydials" in code and "def draw" not in code else 2)
+    w.check("docs-%s.png" % name, min_colours=1 if ("from pydials" in code and "def draw" not in code) or "background()" in code else 2)

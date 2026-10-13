@@ -207,6 +207,24 @@ def draw():
 ```
 
 Change the notes in the line and both what you hear and what you see change. A tracker song can be written out a staff a channel and followed as it plays, a sheet can be written a note at a time (`make_sheet()`), and a learner can play along on a keyboard (`page.play_along("wait")`, `keyboard(page)`): [Sheet music](docs/sheet-music.md).
+## Effects
+
+A scene can have effects on it, done by the page's graphics card:
+
+```python
+from pyvisualfx import *
+
+glow(1)                 # bright things shine
+trails(1.5)             # and leave a trail that takes a second and a half to fade
+
+def draw():
+    background("black")
+    circle(mouse.x, mouse.y, 40, "gold")
+```
+
+There are ninety-four: a kaleidoscope, blurs, an old television, glitches, rain and snow, backdrops such as `plasma()` and `fire()` that need no drawing at all, and `look("arcade")` for several at once. Their settings are attributes (`tail.zoom = 2`), and `react(shine, "strength", "bass")` makes one move to the scene's music. The library comes with Pyctures, and a page loads it only for a scene that imports it. See [Effects](docs/effects.md) and [every effect](docs/effects-reference.md), with a picture of each.
+
+[![Every effect, each on the same small scene](docs/images/effects.jpg)](docs/effects-reference.md)
 
 ## Scenes
 

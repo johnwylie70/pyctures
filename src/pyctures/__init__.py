@@ -64,6 +64,7 @@ H_SAVED = 8  # the page's keeper of saved values
 H_FILES = 9  # the page's keeper of files and databases
 H_SOUND = 10     # the page's sound: `from synths import *` sends it a frame's sounds as one command, send(batch)
 H_DIALS = 11     # the page's dials, sliders and piano keys: `from pydials import *` makes each with one command
+H_EFFECTS = 13   # pyvisualfx
 H_NOTATION = 15  # the page's sheet music: `from pynotation import *`
 
 
@@ -93,6 +94,7 @@ class _State:
         self.databases = []      # every database that is open
         self.ending = []         # functions called as a frame is sent (a library that sends once a frame, as synths does)
         self.vt = None           # the scene's time while a recorder steps it (each frame says it), else None
+        self.dt = None           # this frame's seconds, or None
         self.scenes = None       # what the library pyscenes keeps for this run, for a file that names a scene
         self.stage = None        # its director, once the file has defined a scene: each frame tests this and no more
 
@@ -1692,6 +1694,7 @@ def _reply(error=None, error_line=0):
         _keep_database(db)   # once a frame, however many statements it ran
     for end in S.ending:
         end()
+    S.dt = None
     cmds, S.cmds = S.cmds, []
     out = S.out.getvalue()
     err = S.err.getvalue()
@@ -1923,7 +1926,8 @@ def tick(payload_json):
         _new_frame()
         _apply_events(p)
         _step_tasks(answers)
-        _call_frame_functions(float(p.get("dt", 0.0)))
+        S.dt = float(p.get("dt", 0.0))
+        _call_frame_functions(S.dt)
     except BaseException as e:  # noqa: BLE001
         msg, line = _format_error(e)
         S.ns = None

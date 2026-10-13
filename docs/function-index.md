@@ -627,9 +627,15 @@ These come with `from pydials import *` at the top of the scene. Explained in [D
 |---|---|
 | `dial(label, min, max, start)`, `slider(...)` | A number to turn or slide; or a setting of a synth: `dial("cutoff", lead, "cutoff")` |
 | `button(label)`, `toggle(label)`, `select(label, choices)` | A button, a switch, and one of a list |
+| `rotary(label, choices)` | A knob that clicks between a few choices; or a setting of a synth: `rotary("space", lead, "reverb_type")` |
 | `keyboard(target, octave=4)` | A piano keyboard that plays a synth |
 | `scope(source)`, `meter(source)` | A wave, or any value over time; a level |
-| `label(text)`, `row()`, `layout(...)`, `theme(...)` | Words, a new row, where the rows go, the colours |
+| `label(text)` | Words; made just before some controls, their heading |
+| `with group(title):`, `with row():`, `with column():`, `with grid(3):` | Controls kept together on a titled plate; in a line, one under another, or in columns |
+| `row()`, `wrap()`, `spacer()` | A new line, where a line may be split, and the room left over |
+| `page(name)` | A page of controls with a tab |
+| `layout(...)`, `theme(...)` | Where the plates go, how big, whether they wrap, a panel of a set size; the colours |
+| `room()` | The rectangle no control is on |
 
 ## Other names
 

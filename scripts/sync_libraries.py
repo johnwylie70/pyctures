@@ -37,6 +37,9 @@ COPIES = {
     ("notation.js", "LICENSE"): WEB / "notation" / "LICENSE",
     ("notation.js", "LICENSE-GLYPHS"): WEB / "notation" / "LICENSE-GLYPHS",
     ("pynotation", "src/pynotation/__init__.py"): WEB / "notation" / "pynotation.py",
+    ("visualfx.js", "visualfx.js"): WEB / "visualfx" / "visualfx.js",
+    ("visualfx.js", "LICENSE"): WEB / "visualfx" / "LICENSE",
+    ("pyvisualfx", "src/pyvisualfx/__init__.py"): WEB / "visualfx" / "pyvisualfx.py",
 }
 
 

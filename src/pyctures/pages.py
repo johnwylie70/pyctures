@@ -38,6 +38,10 @@ ASSETS = {
     "notation/pynotation.py": WEB / "notation" / "pynotation.py",
     "notation/LICENSE": WEB / "notation" / "LICENSE",
     "notation/LICENSE-GLYPHS": WEB / "notation" / "LICENSE-GLYPHS",
+    # Effects (`from pyvisualfx import *`): a copy, loaded only for a scene that imports it.
+    "visualfx/visualfx.js": WEB / "visualfx" / "visualfx.js",
+    "visualfx/pyvisualfx.py": WEB / "visualfx" / "pyvisualfx.py",
+    "visualfx/LICENSE": WEB / "visualfx" / "LICENSE",
 }
 
 # The libraries a scene asks for by importing them: the name it imports -> (its folder, the page's half,
@@ -47,6 +51,7 @@ LIBRARIES = {
     "pydials": ("dials", "dials.js", "pydials.py"),
     "pyscenes": ("scenes", "scenes.js", "pyscenes.py"),
     "pynotation": ("notation", "notation.js", "pynotation.py"),
+    "pyvisualfx": ("visualfx", "visualfx.js", "pyvisualfx.py"),
 }
 
 # Scenes are not imported: a file that names one is given them (the same words as pyctures.js and the Python half).

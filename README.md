@@ -187,6 +187,30 @@ keyboard(lead, octave=4)
 
 Both libraries come with Pyctures, and a page loads them only for a scene that uses them.
 
+## Scenes
+
+A file can be several scenes: a title screen, the game and a game-over screen, or the parts of a show on a timer. Each is a class with the same functions a file has, and starts empty.
+
+```python
+class Title(Scene):
+    def draw(self):
+        background("midnightblue")
+        text("Click to start", width / 2, height / 2, "white", 30, "centre")
+
+    def on_mouse_down(self, x, y):
+        go("Game", transition="crossfade")
+
+
+class Game(Scene):
+    length = 20                 # seconds, then the next scene written begins
+
+    def draw(self):
+        background("black")
+        circle(mouse.x, mouse.y, 20, "gold")
+```
+
+`go`, `next_scene()` and `restart()` change scene, `length`, `beats` or `bars` end one by itself, and `transition = "crossfade"` (or `"fade"`, `"wipe"`, `"slide_left"`…) is how one arrives. The page runs the transition, so it is smooth however busy Python is. A program whose scenes all have a length has a scrubber with a tick where each starts. The words are [Pymations'](https://github.com/johnwylie70/pymations) wherever the thing is the same. See [Scenes](docs/scenes.md).
+
 ## Bringing a JavaScript example across
 
 The calls are the same; a few things are written the Python way.
@@ -278,6 +302,7 @@ In [`examples/`](examples), each with a comment at the top saying what it shows.
 | `snake.py` | Snake: a game on a grid, with a best score that is kept |
 | `high_score.py` | A best score that is still there next time: `save` and `load` |
 | `top_scores.py` | Every game written into a database, and the best five shown: `open_database` |
+| `three_screens.py`, `three_parts.py` | Scenes: a title screen, the game and a game-over screen; and three parts on a timer with a transition into each |
 | `cube_dodge.py` | A 3D game: dodge the oncoming blocks |
 | `lit_scene.py` | Shapes on a floor with a spotlight and shadows |
 | `bouncing_balls.py` | A 2D animation with trails; click to add balls |

@@ -2262,7 +2262,10 @@ export class Scene {
       if (token !== r.token) return { frame, time, running: false }
       r.busy = false
       if (r.warnedStuck) this.unstuck()
-      return { frame, time, running: this.handleReply(JSON.parse(text), token) }
+      const running = this.handleReply(JSON.parse(text), token)
+      // A change of scene moves on by this one frame (the screen's refreshes do not move it while stepped).
+      if (this.stage) this.stage.step(1 / s.fps)
+      return { frame, time, running }
     } catch (error) {
       if (token !== r.token) return { frame, time, running: false }
       r.busy = false

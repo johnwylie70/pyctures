@@ -83,6 +83,7 @@ window.film = async (fps, frames) => {
   // Frame 0 is what the scene drew as it started; every other frame is one step.
   for (let f = 0; f < frames; f++) {
     if (f) await scene.step()
+    if (window.slow) await new Promise((done) => setTimeout(done, window.slow))
     parts.push(scene.sound.take())
     if (g.getImageData(5, 5, 1, 1).data[0] > 128) white.push(f)
   }
@@ -95,7 +96,7 @@ window.film = async (fps, frames) => {
   let quiet = 300
   for (let i = 0; i < left.length; i++) { if (Math.abs(left[i]) > 1e-4) { if (quiet >= 300) starts.push(i); quiet = 0 } else quiet++ }
   const player = scene.sound.player
-  return { white, starts, total: left.length, each: parts.slice(1).map((p) => p.length), kind: player.kind, context: player.context, status: scene.status, errors: scene.errors, seen: Array.from(window.pySeen || [], (row) => Array.from(row)) }
+  return { white, starts, total: left.length, each: parts.slice(1).map((p) => (p ? p.length : 0)), kind: player && player.kind, context: player && player.context, status: scene.status, errors: scene.errors, seen: Array.from(window.pySeen || [], (row) => Array.from(row)) }
 }
 </script>
 '''
@@ -148,3 +149,58 @@ def test_a_stepped_scene_s_sound_is_on_its_frames(browser, pyctures_run, tmp_pat
     for f, (dt, time, beat) in enumerate(seen[1:], start=1):
         assert abs(dt - 1 / fps) < 1e-9 and abs(time - f / fps) < 1e-9 and abs(beat - f / fps * 2) < 1e-6
     page.close()
+
+
+CHANGE = '''
+from pyscenes import *
+
+n = 0
+
+
+class Dark(Scene):
+    def draw(self):
+        global n
+        background("black")
+        n += 1
+        if n == 10:
+            go("Red", transition="crossfade", transition_time=0.5)
+
+
+class Red(Scene):
+    def draw(self):
+        background("#ff0000")
+'''
+
+CHANGE_PAGE = PAGE.replace("clap.py", "change.py").replace(
+    "if (g.getImageData(5, 5, 1, 1).data[0] > 128) white.push(f)",
+    "{ const c = new OffscreenCanvas(8, 8).getContext('2d'); for (const layer of document.querySelectorAll('#s canvas')) if (layer.style.display !== 'none') c.drawImage(layer, 0, 0, 8, 8); white.push(c.getImageData(4, 4, 1, 1).data[0]) }")
+
+
+def test_a_change_of_scene_moves_by_the_recorder_s_frames(browser, pyctures_run, tmp_path):
+    """Stepped, a transition is moved by step() and by nothing else: half a second at thirty frames a second is
+    fifteen frames, each a fifteenth further (eased at both ends), however long the frames really took."""
+    if not (WEB / "scenes" / "pyscenes.py").exists():
+        pytest.skip("this Pyctures has no scenes")
+    (tmp_path / "change.py").write_text(CHANGE)
+    (tmp_path / "film.html").write_text(CHANGE_PAGE)
+    p = pyctures_run(tmp_path)
+    runs = []
+    for wait in (0, 40):
+        page = browser.new_page(viewport={"width": 400, "height": 300})
+        page.goto(p.url + "film.html")
+        page.wait_for_function("() => typeof window.film === 'function'")
+        if wait:
+            # A recorder that is slow, differently: the pictures must not know.
+            page.evaluate("(ms) => { window.slow = ms }", wait)
+        got = page.evaluate("([fps, frames]) => window.film(fps, frames)", [30, 40])
+        assert not got["errors"]
+        runs.append(got["white"])
+        page.close()
+    red = runs[0]
+    assert runs[0] == runs[1]
+    start = next(i for i, v in enumerate(red) if v > 0)
+    ramp = red[start - 1:start + 15]
+    assert ramp[0] == 0 and ramp[-1] == 255 and red[start + 14:] == [255] * (len(red) - start - 14)
+    for k in range(1, 15):
+        t = k / 15
+        assert abs(ramp[k] - 255 * t * t * (3 - 2 * t)) <= 2, (k, ramp)

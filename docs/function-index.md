@@ -615,7 +615,7 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `make_synth(name, ...)` | A synth of your own: `.play`, `.start`, `.stop`, `.play_notes`, `.arp`, and its settings as attributes |
 | `load_sample(path)` | A recorded sound from a file, as a synth |
 | `load_samples(files)` | Several recordings as one instrument: `load_samples({"C2": "piano-C2.wav", "C3": "piano-C3.wav"})`; `kit=True` is a drum kit |
-| `play_arp(chord)`, `start_arp(chord)` | A chord from one voice, as a fast arpeggio |
+| `play_arp(chord)`, `start_arp(chord)` | A chord as an arpeggio: fast on one voice, or with `step="sixteenth"` a note struck at each step in time with the tempo, with `gate`, `octaves`, `swing`, `accent`, `pattern` and `order` |
 | `chord_notes(name)`, `note_number(note)` | The notes of a chord, and a note as a number |
 | `set_effects(...)` | The echo, reverb and chorus every synth shares |
 | `set_tempo(bpm)`, `beats(n)`, `beat()`, `length_beats(name)`, `sound_time()` | The beat, and the sound clock |

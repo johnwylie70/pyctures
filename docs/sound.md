@@ -135,7 +135,7 @@ def draw():
 | `lead.set(cutoff=4000, glide=2)` | Glide there over two seconds (`slide=2` is an older word for the same) |
 | `lead.voice = "robot"` | A voice changer on everything it plays: see [Your voice](#your-voice) |
 | `lead.samples()`, `lead.level()`, `lead.notes()` | What it is doing, for your own drawing: see [Drawing the sound yourself](#drawing-the-sound-yourself) |
-| `lead.arp("Cm7")`, `arp = lead.start_arp("Am")` | A chord from one voice, as a fast arpeggio. `arp.change("F")` changes it as it plays |
+| `lead.arp("Cm7")`, `arp = lead.start_arp("Am")` | A chord as an arpeggio, fast or in time with the tempo (`step="sixteenth"`). `arp.change("F")` changes it as it plays: see [Arpeggios, fast and musical](#arpeggios-fast-and-musical) |
 
 The settings you will use most:
 
@@ -152,6 +152,56 @@ The settings you will use most:
 | `distortion`, `crush` | Grit, and the bits each sample keeps (4 is an old games console) |
 
 `setting_names()` lists every one. The echo, the reverb and the chorus are shared by all synths, and are shaped with `set_effects(echo_time=0.3, echo_feedback=0.5, reverb_size=0.8)`. The reverb is one room that every synth sends into: `set_effects(reverb_type="hall")` chooses what kind of space it is (`"room"`, `"hall"`, `"plate"`, `"cathedral"` or `"spring"`), `reverb_decay=3` how many seconds it rings, `reverb_predelay=0.03` how long before it starts, and `reverb_low_cut=300` how much of the bass it leaves out (in hertz). A shared setting has one value whoever set it: `lead.reverb_type = "hall"` is the same thing, and every synth reads it back.
+
+## Arpeggios, fast and musical
+
+A chord is notes together. An arpeggio is the notes of a chord one at a time. There are two kinds here, and they sound nothing alike.
+
+**Fast: the chord of a Commodore 64 tune.** One voice whose pitch jumps through the chord fifty times a second, which the ear hears as a shimmering chord. The chip had only three voices to spend.
+
+```py
+play_arp("Cm7")                             # half a second of C minor seventh
+play_arp("C4", "minor", 2)                  # a note and a kind, for two seconds
+play_arp(["C4", "E4", "G4", "C5"], 1, speed=12, order="up-down")
+```
+
+`speed` is steps a second: 50 unless you say, which is the speed chip music was written at; at 12 you can hear each step.
+
+**Musical: each step a note of its own, in time with the tempo.** Say how long a step is with `step`, a note length, and every step is struck afresh, held for part of the step and let go.
+
+```py
+set_tempo(138)
+lead = make_synth("pluck")
+lead.arp("Am", "whole", step="sixteenth", octaves=2, gate=0.5)       # a trance arpeggio: up through two octaves
+lead.arp("C", "whole", step="eighth", order="up-down", gate=0.9)     # a pop arpeggio: slower, nearly joined up
+```
+
+What an arpeggio can be told:
+
+| | |
+|---|---|
+| `step` | how long a step is: `"sixteenth"`, `"eighth"`, `"eighth."`, `"1/12"`, or a number of beats. It follows `set_tempo`, even while the arpeggio is sounding |
+| `speed` | steps a second instead (50): the fast kind |
+| `order` | `"up"`, `"down"`, `"up-down"`, `"up-down2"` (the top and bottom notes twice), `"as written"`, `"random"`, `"together"` (the whole chord at each step: stabs) |
+| `octaves` | 1 to 4: through the chord, then the same an octave up |
+| `gate` | how much of its step each note is held, 0.05 to 1 (0.5). Short is plucked; 1 is joined up |
+| `swing` | 0 to 0.75: every second step is that much of a step late (0.33 is a triplet feel) |
+| `accent` | how hard each step is struck, up to eight numbers from 0 to 1 that go round: `[1, 0.5, 0.5, 0.5]`. 0 is a rest |
+| `pattern` | a rhythm of its own in the place of the order: `"1 - 3 2 _ 1 3 5^"`, or one by name |
+| `style` | `"strike"` (each step a new note: what `step` gives) or `"slide"` (one voice whose pitch jumps: what `speed` gives). Say it to have the other |
+
+In a **pattern** each step is a number (that note of the chord, counted from 1 at the lowest; past the top it carries on an octave up), `-` for a rest, or `_` to hold the last note through the step. After a note, `'` is an octave up, `,` an octave down, `^` an accent and `:3` its own gate in tenths; `~` before a note slides into it. The patterns by name are `bounce`, `octaves`, `root-fifth`, `thumb`, `converge`, `diverge`, `offbeat`, `gallop`, `trance` and `acid`.
+
+One that stays, and changes chord under your hands:
+
+```py
+chord = lead.start_arp("Am", step="sixteenth", pattern="trance")
+chord.change("F")                          # from the next step, and it keeps its place in the pattern
+chord.gate = 0.3                           # so do gate, octaves, swing, accent, pattern, order, step and speed
+chord.stop()
+```
+
+A chord has room for eight notes. Every synth has `arp` and `start_arp`; with no synth (`play_arp`, `start_arp`) they play on a chip sound. The length after the chord is how long the arpeggio sounds, as for any note (half a second unless you say), and it takes `volume`, `pan`, `after`, `at` and `beat` like any note; `chord.change("F", after=2)` changes it later. A struck arpeggio is ordinary notes, so it goes through the synth's envelope and filter at every step, and plays the right recordings of an instrument from `load_samples`. The tempo an arpeggio in steps keeps is the page's: where several scenes share a page, it is the tempo that was set last. [Arpeggio Chords](../examples/arpeggio_chords.py) is the fast kind, with a tune over it.
 
 ## Samples
 

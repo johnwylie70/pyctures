@@ -569,6 +569,32 @@ def test_several_recordings_are_one_instrument_that_is_heard(browser, pyctures_r
     assert not w.errors, w.errors
 
 
+ARPEGGIO = '''
+from synths import *
+set_tempo(240)
+lead = make_synth("pluck")
+lead.arp("Am", 30, step="sixteenth", octaves=2, gate=0.5)
+'''
+
+
+def test_a_musical_arpeggio_strikes_the_notes_of_its_chord_in_time(browser, pyctures_run, tmp_path):
+    """lead.arp(..., step="sixteenth") from Python is played by the engine's arpeggiator: each step a note of its
+    own, so the synth is heard sounding the notes of A minor through two octaves, one after another."""
+    server = pyctures_run(write(tmp_path, ARPEGGIO))
+    w = Watched(browser, server.url)
+    w.wait_running()
+    listen(w)
+    page = w.page
+    seen = set()
+
+    def enough():
+        seen.update(heard(page, "s1")["notes"])
+        return len(seen) >= 5
+    wait_for(page, enough, "five different notes of the arpeggio", 20)
+    assert seen <= {69, 72, 76, 81, 84, 88}, seen       # A4 C5 E5 and the same an octave up
+    assert not w.errors, w.errors
+
+
 BUFFER = "from pyctures import *" + TUNE + '''
 set_sound_buffer("large")
 

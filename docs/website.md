@@ -150,6 +150,27 @@ mount(el, {
 - **`onSoundEvents(listener, scope)`**, with `send`: how what your player says back reaches the scene (the microphone is on or is not, a recording is over, a file is saved). Pass it to your player in the same way (`player.onSoundEvents`). With it a scene's `take.done` and `mic.state` work; without it they never change. `songPosition()`, also with `send`, is where your player's song is, for a scene that draws it.
 - **No `eval` is needed**, for sound or for dials. A page's policy has to allow `'wasm-unsafe-eval'` (the engine is WebAssembly) and, for the worklet from a Blob, `blob:` in `script-src`; `worklet: "file"` loads `synths-worklet.js` by its address instead.
 
+### Recording a scene as a video, with its sound
+
+A recorder wants every frame exactly 1/fps after the last, however long Python and the drawing took, and the sound in step with the pictures. `stepped` gives it both. The scene then does not run by the screen's refreshes: it starts, draws its first frame at time 0, and waits to be told.
+
+```js
+const scene = mount(el, { src: "game.py", stepped: { fps: 60 } })
+await scene.ready                           // the first frame is on the canvas
+for (let n = 1; n < frames; n++) {
+  await scene.step()                        // one frame: the scene's time moves on by 1/60, and the frame is drawn
+  const sound = scene.sound.take()          // { left, right, sampleRate, length }: the samples of the frame before
+  // copy scene.canvas, and keep both
+}
+await scene.sound.stepTo(frames / 60)       // the last frame lasts 1/60 too: its sound
+const last = scene.sound.take()
+```
+
+- Each `step()` makes the sound up to the frame's time first, then asks Python for the frame with `dt` of exactly 1/fps, and is finished when the frame has been drawn, so the canvas can be copied at once.
+- The sound is made by a player with no sound card (synths.js's [stepped player](https://github.com/johnwylie70/synths.js/blob/main/docs/commands.md)): nothing is heard, no tap is needed first, and n frames are `round(n × 48000 / fps)` samples, the first of them the first frame's. A note the scene plays in a frame begins on that frame's first sample.
+- In Python the scene's time is the recorder's: `sound_time()`, `beat()` and `sleep()` go by it (each frame says its time as `vt`, which the runtime keeps in `S.vt`), so a scene needs no change to be recorded.
+- An app that draws the frames itself and uses only the page's sound keeper tells it the same things: `sound.stepped({ fps })` before the scene's first sound, `await sound.stepTo(seconds)` before each frame's commands are passed on, and `sound.take()`.
+
 ### The microphone, and saved sound
 
 A scene that calls `use_microphone()` ([Sound and music](sound.md#your-voice)) has the page ask the browser for the microphone, at that moment and not before, and you need do nothing, as long as the page may ask:

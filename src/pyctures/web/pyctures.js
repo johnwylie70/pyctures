@@ -812,8 +812,8 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   size()
 
   return {
-    /** Queue one frame's commands; drawn on the next refresh. */
-    push(cmds, at) {
+    /** Queue one frame's commands; drawn on the next refresh, or with `now` at once (a scene that a recorder steps). */
+    push(cmds, at, now = false) {
       // A frame's sounds are heard now, not when the frame is drawn: they are timed, and waiting for a refresh
       // (or two, in the queue) would use up the moment the player has to place them exactly.
       if (sound && cmds) {
@@ -825,6 +825,7 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
       // Not a file's own text: that is the scene's to keep as it wrote it.
       if (images && cmds) swapStrings(cmds.some((c) => c[0] === 'call' && c[3] === 9) ? cmds.filter((c) => !(c[0] === 'call' && c[3] === 9)) : cmds, images)
       pending.push({ cmds: cmds || [], at, recv: at ? abs() : 0 })
+      if (now) { while (pending.length) applyBatch(pending.shift()); return }
       if (!scheduled) { scheduled = true; requestAnimationFrame(present) }
     },
     get size() { return { width: cssW, height: cssH, pixel_ratio: dpr } },
@@ -983,12 +984,26 @@ const NO_READING = { samples: [], level: [0, 0], notes: [] }
  * id, samples, level, notes }, and where the song is, { type: 'position', … }, through the same `events(fn)`,
  * until Python has not asked again for a second and a half. So Python's lead.samples() is a frame late.
  *
+ * RECORDED A FRAME AT A TIME. A page that records the scene as a video gives it one frame at a time, each exactly
+ * 1/fps after the last however long it took to draw, so sound played by the sound card would not stay with the
+ * pictures. `host.stepped` ({ fps, sampleRate }), or `stepped(config)` called before the first sound, says so:
+ * the scene then has a player of its own with no sound card (synths.js's createPlayer({ stepped })), which makes
+ * exactly the samples up to the time it is told. `stepTo(seconds)` is that telling: the keeper's clock, which is
+ * otherwise the page's, reads `seconds` from then on, and the promise it gives is kept when the sound up to there
+ * has been made; `take()` hands over the samples made since the last take ({ left, right, sampleRate, length }).
+ * Python's clock is stepped by the same recorder (the `vt` of each frame, which `synths` reads), so the two agree
+ * and a command lands on the sample of the time it names. Nothing is heard, and nothing is paused out of view.
+ *
  * synths.js is loaded when the first sound is asked for, or before the scene starts when its source imports
  * `synths` (`module`). A scene that makes no sound loads nothing.
  */
 function soundKeeper({ host = null, src = '', module = null, onState = null, midi = undefined, microphone = undefined, save = undefined, files = null }) {
   host = host || {}
-  const clock = () => performance.now() / 1000
+  // Stepped by a recorder: { fps, sampleRate, t: the time the recorder last said }. Otherwise the page's own clock.
+  const steppedBy = (given) => (given ? { fps: given.fps > 0 ? given.fps : 60, sampleRate: given.sampleRate || 48000, t: 0 } : null)
+  let step = typeof host.send === 'function' ? null : steppedBy(host.stepped)
+  let mine = null              // the player this scene joined, with who else has: the page's, or its own when stepped
+  const clock = () => (step ? step.t : performance.now() / 1000)
   const elsewhere = typeof host.send === 'function'
   const scope = 'scene' + ++soundScopes
   const hear = (now) => { state = now; if (onState) onState(now); if (host.onState) host.onState(now) }
@@ -1070,12 +1085,16 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   }
 
   function makePlayer() {
-    if (!pagePlayer || pagePlayer.player.state === 'closed' || pagePlayer.player.state === 'failed') {
+    // A stepped scene has a player to itself: the page's own plays through the sound card.
+    let joined = step ? null : pagePlayer
+    if (!joined || joined.player.state === 'closed' || joined.player.state === 'failed') {
       // The first scene to make a sound makes the player, with what its host gave it.
       const inl = inline()
       const packed = inl && inl.synths && inl.synths.wasm
-      const mine = pagePlayer = { player: null, users: 0, heard: new Set() }
-      const options = { onState: (state) => { for (const tell of mine.heard) tell(state) } }
+      const made = joined = { player: null, users: 0, heard: new Set() }
+      if (!step) pagePlayer = made
+      const options = { onState: (state) => { for (const tell of made.heard) tell(state) } }
+      if (step) options.stepped = { fps: step.fps, sampleRate: step.sampleRate }
       if (host.wasm) options.wasm = host.wasm
       else if (packed) { options.wasm = base64Bytes(packed); options.worklet = 'blob' }
       if (host.worklet) options.worklet = host.worklet
@@ -1089,11 +1108,12 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       if (mic !== undefined) options.microphone = mic
       if (host.midiModule) options.midiModule = host.midiModule
       else if (inl && inl.synths && inl.synths.midi) options.midiModule = URL.createObjectURL(new Blob([inl.synths.midi], { type: 'text/javascript' }))
-      mine.player = mod.createPlayer(options)
+      made.player = mod.createPlayer(options)
     }
-    pagePlayer.users++
-    pagePlayer.heard.add(hear)
-    player = pagePlayer.player
+    mine = joined
+    mine.users++
+    mine.heard.add(hear)
+    player = mine.player
     joinMidi(player)
     joinSound(player)
     if (player.state === 'waiting' || player.state === 'on') hear(player.state)
@@ -1356,8 +1376,9 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       const here = clock()
       if (typeof batch.now === 'number') {
         // The shortest journey seen is how far apart the two clocks are; it may creep up half a millisecond a second.
+        // Stepped, the frame was made for the time the recorder said, which is the time here: no journey at all.
         const seen = here - batch.now
-        offset = offset === null ? seen : Math.min(seen, offset + 0.0005 * Math.max(0, here - last))
+        offset = offset === null || step ? seen : Math.min(seen, offset + 0.0005 * Math.max(0, here - last))
         last = here
       }
       for (const c of batch.cmds) {
@@ -1419,9 +1440,21 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
     }),
     /** The player, once a sound has been asked for (null when a host takes the commands). */
     get player() { return player },
-    /** Silence while the scene is out of view, with everything kept as it is. */
-    pause() { if (!paused && used) quiet(true); paused = true },
+    /** Silence while the scene is out of view, with everything kept as it is. (Not while it is recorded: its frames go on.) */
+    pause() { if (step) return; if (!paused && used) quiet(true); paused = true },
     resume() { if (paused && used) quiet(false); paused = false },
+    /** A recorder is about to give the scene one frame at a time, at `fps` (see RECORDED A FRAME AT A TIME). It must come before the first sound: false if it came too late, or a host plays the sound. */
+    stepped(config) { if (player || elsewhere || closed) return false; step = steppedBy(config || {}); return true },
+    /** The recorder's frames a second and samples a second, or null when the scene is not stepped. */
+    get stepping() { return step ? { fps: step.fps, sampleRate: step.sampleRate } : null },
+    /** The clock now reads `seconds`: a promise of the sound up to there having been made (and of how many samples that was). */
+    stepTo(seconds) {
+      if (!step) return Promise.resolve(0)
+      step.t = seconds
+      return player && player.stepped ? player.stepped.advance(seconds) : Promise.resolve(0)
+    },
+    /** The samples made since the last take, { left, right, sampleRate, length }, or null when there is no stepped sound yet. */
+    take() { return player && player.stepped ? player.stepped.take() : null },
     close() {
       if (closed) return
       // Everything of this scene is stopped and forgotten; the player goes when its last scene does.
@@ -1431,9 +1464,9 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       midiHeard.clear()
       if (soundLeave) soundLeave()
       soundHeard.clear()
-      if (player && pagePlayer && pagePlayer.player === player) {
-        pagePlayer.heard.delete(hear)
-        if (--pagePlayer.users <= 0) { player.close(); pagePlayer = null }
+      if (player && mine && mine.player === player) {
+        mine.heard.delete(hear)
+        if (--mine.users <= 0) { player.close(); if (pagePlayer === mine) pagePlayer = null }
       }
     },
   }
@@ -1891,6 +1924,17 @@ let activeScene = null
  *   sound       how the scene's sound is played, from a host (see soundKeeper)
  *   microphone  a host's own microphone (a stream, pushed frames, or false), and `save`, where save_sound's files go
  *   dials       dials.js from a host: the module, a promise of it, or its address
+ *   stepped     { fps } from a host that records the scene as a video: see STEPPED below
+ *
+ * STEPPED. A recorder wants every frame exactly 1/fps after the last, however long Python and the drawing took,
+ * and the sound in step with them. With `stepped: { fps: 60 }` the scene does not run by the screen's refreshes:
+ * it starts, draws its first frame (time 0), and then waits to be told. Each `await scene.step()` is one frame:
+ * the scene's time moves on by 1/fps, the sound up to that time is made (by a player with no sound card: see
+ * soundKeeper), Python is asked for the frame with that `dt` and that time, and the promise is kept when the
+ * frame has been drawn, so the canvas can be copied at once. `scene.ready` is a promise of the first frame.
+ * `scene.sound.take()` gives the samples made so far, and `await scene.sound.stepTo(frames / fps)` makes the
+ * last frame's when the recording ends: n frames are round(n × sampleRate / fps) samples, the first of them the
+ * first frame's. In Python, sound_time(), beat() and sleep() go by the same stepped time. Nothing is heard.
  */
 export class Scene {
   constructor(el, options) {
@@ -1900,6 +1944,11 @@ export class Scene {
     this.name = decodeURIComponent((this.opt.src || 'scene.py').split('/').pop())
     this.status = 'idle'
     this.errors = []
+    // Stepped by a recorder: its frames a second, and how many frames have been asked for.
+    const stepped = this.opt.stepped
+    this.stepping = stepped ? { fps: stepped.fps > 0 ? stepped.fps : 60, sampleRate: stepped.sampleRate || 48000, n: 0 } : null
+    /** A promise of the scene's first frame having been drawn (or of its having failed to start). */
+    this.ready = new Promise((yes) => { this.isReady = yes })
     this.r = {
       token: 0, live: false, busy: false, busySince: 0, warnedStuck: false, missedRefresh: false,
       sent: 0, shown: 0, clock: 0, period: 1000 / 60, lastRaf: 0, raf: 0,
@@ -2062,8 +2111,9 @@ export class Scene {
       // A browser keeps a page silent until it has been touched: say so over the scene, until it has been. The
       // microphone is asked for at once, without waiting for that, but is neither heard nor recorded until then.
       const waiting = ['Click, tap or press a key to turn the sound on', 'Click, tap or press a key to turn the sound and the microphone on']
+      if (this.stepping) this.stepping.n = 0
       this.sound = soundKeeper({
-        host: this.opt.sound, src: this.opt.src, module: libs.synths, midi: this.opt.midi,
+        host: this.stepping ? { ...(this.opt.sound || {}), stepped: this.stepping } : this.opt.sound, src: this.opt.src, module: libs.synths, midi: this.opt.midi,
         microphone: this.opt.microphone, save: this.opt.save, files: this.files,
         onState: (state) => { if (token === r.token && (state === 'waiting' || (this.coverEl && waiting.includes(this.coverEl.textContent)))) this.cover(state === 'waiting' ? waiting[this.sound && this.sound.microphone ? 1 : 0] : '') },
       })
@@ -2099,7 +2149,8 @@ export class Scene {
       r.busy = true
       r.busySince = performance.now()
       this.setStatus('running')
-      const text = await this.transport.start(source, { ...r.size, measure: r.measuring, saved: this.saved.all(), ...(this.stage ? { scenes: { transitions: this.stage.names() } } : {}) }, stored)
+      // A stepped scene's time begins at 0, and Python is told so (`vt`): its sound and its sleep() go by it.
+      const text = await this.transport.start(source, { ...r.size, measure: r.measuring, saved: this.saved.all(), ...(this.stage ? { scenes: { transitions: this.stage.names() } } : {}), ...(this.stepping ? { vt: 0 } : {}) }, stored)
       r.busy = false
       if (r.warnedStuck) this.unstuck()
       if (token !== r.token) return
@@ -2107,9 +2158,12 @@ export class Scene {
       if (this.handleReply(JSON.parse(text), token)) {
         r.live = true
         r.measureSince = performance.now()
-        r.raf = requestAnimationFrame(this.loop)
+        // Stepped, the next frame is asked for by step(), not by the screen.
+        if (!this.stepping) r.raf = requestAnimationFrame(this.loop)
       }
+      this.isReady()
     } catch (error) {
+      this.isReady()
       if (token !== r.token) return
       r.busy = false
       if (error && error.restarted) { this.start(); return }   // another scene restarted Python
@@ -2205,8 +2259,47 @@ export class Scene {
     this.setStatus('error')
   }
 
+  /**
+   * One frame of a stepped scene (see STEPPED): its time moves on by 1/fps, the sound up to there is made, Python
+   * makes the frame and it is drawn. It gives { frame, time, running }: `running` is false once the scene has ended
+   * or failed, and then the picture stays as it is and only the sound moves on.
+   */
+  async step() {
+    const r = this.r, s = this.stepping
+    if (!s) throw new Error('This scene is not stepped: mount it with { stepped: { fps: 60 } }')
+    await this.ready
+    const token = r.token
+    const frame = ++s.n, time = frame / s.fps
+    // The sound up to this frame first: what Python reads back of it with this frame is this frame's.
+    if (this.sound) await this.sound.stepTo(time)
+    if (token !== r.token || !r.live) return { frame, time, running: false }
+    if (this.sound) this.sound.frame()
+    const payload = { dt: 1 / s.fps, vt: time, events: r.events, reads: r.reads, ...r.size, measure: false }
+    r.events = []
+    r.reads = {}
+    r.busy = true
+    r.busySince = performance.now()
+    try {
+      const text = await this.transport.tick(payload)
+      if (token !== r.token) return { frame, time, running: false }
+      r.busy = false
+      if (r.warnedStuck) this.unstuck()
+      return { frame, time, running: this.handleReply(JSON.parse(text), token) }
+    } catch (error) {
+      if (token !== r.token) return { frame, time, running: false }
+      r.busy = false
+      r.live = false
+      const msg = String((error && error.message) || error)
+      this.log('err', msg)
+      this.showError(msg, 0)
+      this.setStatus('error')
+      return { frame, time, running: false }
+    }
+  }
+
   resume() {
     const r = this.r
+    if (this.stepping) return
     if (!r.live || !this.visible || document.hidden) return
     cancelAnimationFrame(r.raf)
     r.clock = 0          // re-anchor: no giant step after a pause
@@ -2225,7 +2318,7 @@ export class Scene {
       r.acc.cmds += d.n || 0
     }
     // A frame left the queue: keep one coming.
-    if (r.live && !r.busy) this.requestFrame(performance.now())
+    if (r.live && !r.busy && !this.stepping) this.requestFrame(performance.now())
     Object.assign(r.reads, d.reads)
     for (const e of d.errors || []) {
       const text = e.line ? `line ${e.line}: ${e.message}` : e.message
@@ -2241,7 +2334,8 @@ export class Scene {
     if (reply.err) this.log('err', reply.err)
     // Always, even an empty frame: the renderer counts frames to pace them.
     r.sent++
-    this.renderer.push(reply.cmds || [], r.measuring ? performance.timeOrigin + performance.now() : 0)
+    // Stepped, the frame is drawn now: whoever asked for it copies the canvas next.
+    this.renderer.push(reply.cmds || [], r.measuring ? performance.timeOrigin + performance.now() : 0, !!this.stepping)
     if (reply.error) {
       r.live = false
       this.log('err', reply.error, reply.errorLine || undefined)
@@ -2260,6 +2354,7 @@ export class Scene {
   /** Ask Python for the next frame. At most one is in flight. */
   requestFrame(now) {
     const r = this.r
+    if (this.stepping) return
     if (!r.live || r.busy || document.hidden || !this.visible) return
     // At most two frames in hand: enough to cover an uneven round trip, few
     // enough that input still feels immediate.
@@ -2415,6 +2510,8 @@ function serverMode() {
  * whose open may push frames (synths.js's docs/microphone.md), or false for none. Without it the browser is asked
  * when a scene first calls use_microphone(). `options.save(file)` is given { name, bytes, type } for each file
  * save_sound() makes, in place of the scene's files (when `storage` has writeBytes) or a download.
+ * `options.stepped` (from a host that records the scene as a video): { fps }. The scene then runs one frame for
+ * each `await scene.step()`, with its sound made in step and kept as samples (see Scene, STEPPED).
  */
 export function mount(el, options = {}) {
   if (el.pycturesScene) return el.pycturesScene
@@ -2437,6 +2534,7 @@ export function mount(el, options = {}) {
     microphone: options.microphone,
     save: options.save,
     dials: options.dials,
+    stepped: options.stepped,
   })
   return scene
 }

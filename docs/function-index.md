@@ -667,7 +667,7 @@ These come with `from pydials import *` at the top of the scene. Explained in [D
 | `colour_picker(label, colour)`, `progress(label, value)`, `light(label, on)`, `busy(label)` | A colour to pick, a bar that fills, a light, and a ring that goes round |
 | `joystick()`, `dpad()`, `action_button(label)` | For games: a stick for a thumb, a pad of arrows, a round button |
 | `envelope(label, target)`, `step_grid(label, steps, rows)`, `pads(label, names, target)`, `pitch_wheel(...)`, `mod_wheel(...)`, `wheel(...)` | For music: the shape of a note as a graph, a grid of steps, pads to hit, and wheels |
-| `steps(label, 16)`, `gate_pattern(label, target)`, `arp_pattern(label, target)`, `drum_seq(label, drums, target)` | A lane of steps, a gate's and an arpeggio's pattern, and a drum sequencer that plays by itself |
+| `steps(label, 16)`, `trance_gate(label, target)`, `arp_pattern(label, target)`, `drum_seq(label, drums, target)` | A lane of steps, a gate's and an arpeggio's pattern, and a drum sequencer that plays by itself |
 | `label(text)` | Words; made just before some controls, their heading |
 | `with group(title):`, `with row():`, `with column():`, `with grid(3):` | Controls kept together on a titled plate; in a line, one under another, or in columns |
 | `row()`, `wrap()`, `spacer()` | A new line, where a line may be split, and the room left over |

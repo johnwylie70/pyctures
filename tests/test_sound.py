@@ -646,6 +646,56 @@ def test_the_trance_gate_and_a_pattern_from_python_are_the_page_s_too(browser, p
     assert not w.errors, w.errors
 
 
+EDITORS = '''
+from pyctures import *
+from synths import *
+from pydials import *
+set_tempo(240)
+pad = make_synth("pad")
+pad.trance_gate = "trance"
+lead = make_synth("lead")
+lead.arp_pattern = "bounce"
+gate = trance_gate("gate", pad)
+arp = arp_pattern("arp", lead)
+pad.start(["A3", "C4", "E4"])
+
+def update(dt):
+    js.pyState = [pad.trance_gate, gate.text, arp.text]
+'''
+
+# The two pattern editors, by their labels: the text each shows and the step it has lit.
+EDITED = """async () => {
+  const { dials } = await import(new URL('pyctures/dials/dials.js', document.baseURI).href)
+  const out = {}
+  for (const c of dials(document.querySelector('[data-pyctures-src] canvas')).all) if (c.kind === 'tranceGate' || c.kind === 'arpPattern') out[c.kind === 'tranceGate' ? 'gate' : 'arp'] = { text: c.text, step: c.step }
+  return out
+}"""
+
+
+def test_the_pattern_editors_are_tied_to_a_python_synth(browser, pyctures_run, tmp_path):
+    """trance_gate("gate", pad) and arp_pattern("arp", lead) from pydials show the synth's own patterns, light the step
+    that is sounding, and follow a pattern the page's synth is given."""
+    server = pyctures_run(write(tmp_path, EDITORS))
+    w = Watched(browser, server.url, size=(900, 700))
+    w.wait_running()
+    listen(w)
+    page = w.page
+    wait_for(page, lambda: len(page.evaluate(EDITED)) == 2, "the two editors", 30)
+    made = page.evaluate(EDITED)
+    assert made["gate"]["text"] == "x.x.xx.xx.x.xx.x" and made["arp"]["text"] == "1 2 3 2", made
+    lit = set()
+
+    def moving():
+        lit.add(page.evaluate(EDITED)["gate"]["step"])
+        return len(lit - {-1, None}) >= 3
+    wait_for(page, moving, "the gate's editor to light the step that is sounding", 20)
+    # A pattern set on the page's synth (as another control would) is what the editor then shows: it asks again.
+    page.evaluate("%s.sound.synth('s1').set('tranceGate', 'x...x...')" % SCENE)
+    wait_for(page, lambda: page.evaluate(EDITED)["gate"]["text"] == "x...x...", "the editor to show the pattern the synth now has")
+    assert page.evaluate("window.pyState")[2] == "1 2 3 2"
+    assert not w.errors, w.errors
+
+
 BUFFER = "from pyctures import *" + TUNE + '''
 set_sound_buffer("large")
 

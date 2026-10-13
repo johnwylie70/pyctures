@@ -58,7 +58,7 @@ All of them take `x=` and `y=` (to place it by hand: its top left corner), `colo
 | `meter(source)` | A level from 0 to 1 as a bar of lights |
 | `label(text)` | Words. Made just before some controls, it is their heading, on the plate they share |
 | `group`, `row`, `column`, `grid`, `page`, `spacer`, `wrap` | What goes with what: see [Laying it out](#laying-it-out) |
-| `number`, `text_box`, `readout`, `checkbox`, `choose`, `radio`, `dropdown`, `xy_pad`, `colour_picker`, `progress`, `light`, `busy`, `range_slider`, `fader`, `joystick`, `dpad`, `action_button`, `envelope`, `step_grid`, `pads`, `pitch_wheel`, `mod_wheel`, `steps`, `gate_pattern`, `arp_pattern`, `drum_seq` | More controls, for any program, for games and for music: see [More controls](#more-controls) |
+| `number`, `text_box`, `readout`, `checkbox`, `choose`, `radio`, `dropdown`, `xy_pad`, `colour_picker`, `progress`, `light`, `busy`, `range_slider`, `fader`, `joystick`, `dpad`, `action_button`, `envelope`, `step_grid`, `pads`, `pitch_wheel`, `mod_wheel`, `steps`, `trance_gate`, `arp_pattern`, `drum_seq` | More controls, for any program, for games and for music: see [More controls](#more-controls) |
 | `layout(at="bottom")` | Where the plates go (`"top"`, `"bottom"`, `"left"`, `"right"`), and `scale=`, `wrap=`, `fit=`, `min_scale=`, `max_scale=`, `columns=`, `size=`, `compact=`, `dividers=`, `plates=`, `align=`, `backdrop=`, `image=` and `on_resize=`. `layout()` gives back the width, height and scale the page last said |
 | `room()` | The rectangle no control is on (`x`, `y`, `width`, `height`), for the scene to draw in. The page says it with a frame, so it is a frame late |
 | `theme(accent="deepskyblue")` | The colours |
@@ -455,41 +455,51 @@ def update(dt):
 
 **Patterns: a gate, an arpeggio and a drum sequencer.**
 
-![A gate's pattern as sixteen bars of different heights with its rate, depth and smoothing beside it, and an arpeggio's pattern as a grid of notes with a tied note, an accent and a slide, with its pattern, rate, octaves and style beside it](images/dials-gate-arp-patterns.png)
+![A gate's pattern as sixteen bars of different heights with its named patterns, depth, rate, smoothing and stereo beside it, and an arpeggio's pattern as a grid of notes with a tied note, and under it lanes of accents, slides, octaves and lengths](images/dials-gate-arp-patterns.png)
 
 ```py
-gate_pattern("gate", pad)                               # pad's gate pattern, with its rate and depth beside it
-arp_pattern("arp", lead)                                # lead's arpeggio
-mine = gate_pattern("chop", "x.x.x5x.X.3.xx..")         # or one of your own: mine.value, mine.text
+from synths import *
+
+set_tempo(138)
+pad, lead = make_synth("pad"), make_synth("lead")
+pad.trance_gate = "trance"                              # a pattern by name, or "x.x.xx.x"
+trance_gate("gate", pad)                                # draws pad.trance_gate, to change by hand, with its depth, rate and the rest beside it
+arp_pattern("arp", lead)                                # draws lead.arp_pattern
+pad.start(["A3", "C4", "E4"])                           # a held chord, chopped by the gate
+lead.start_arp("Am7", step="sixteenth")                 # an arpeggio that follows the pattern
+
+mine = trance_gate("chop", "x.x.x5x.x.3.xx..")          # or a pattern of your own, tied to nothing: mine.value, mine.text
 ```
 
 | | |
 |---|---|
-| `gate_pattern(label, target)` | The steps that open and shut a sound in time, each a bar as tall as the gate is open. Tap a bar on and off, drag up and down on it for its level, drag across to draw a line of them. The − and + at its corner set how many steps (up to 32, or what the target says). |
-| `arp_pattern(label, target)` | An arpeggio's pattern: steps across, and the notes of the chord up the side (1 is its root; the rows above are the same notes an octave up). Tap a cell and that step plays that note; tap it again for a rest; drag sideways from it and the note is held across the next steps. The lane under the grid gives a step an accent, and a second one a slide where the target has slides. `arp.preset("up-down")` writes a pattern by name (`"up"`, `"down"`, `"up-down"`). Options: `notes=` (how many notes of the chord, 4), `octaves=` (2), `steps=`, `slide=`. |
+| `trance_gate(label, target)` | The steps that open and shut a sound in time, each a bar as tall as the gate is open. Tap a bar on and off, drag up and down on it for its level, drag across to draw a line of them. The − and + at its corner set how many steps (up to 32). `gate.preset("pump")` writes a built-in pattern: eighths, offbeat, gallop, trance, stutter, pump, triplets, dotted. |
+| `arp_pattern(label, target)` | An arpeggio's pattern: steps across, and the notes of the chord up the side. 1 is its lowest, and past its top note the count goes on an octave up, so on a chord of four notes row 5 is the lowest again, an octave higher. Tap a cell and that step plays that note; tap it again for a rest; drag sideways from it and the note is held across the next steps. Under the grid is a lane for each other thing a step has: tap for an accent (`^`), tap for a slide into the note (`~`), tap to go round the octaves (`'`), and drag up and down for the step's own length (`:`). `arp.preset("trance")` writes a built-in pattern: bounce, octaves, root-fifth, thumb, converge, diverge, offbeat, gallop, trance, acid. Options: `notes=` (how many rows of notes to start with, 8), `steps=`. |
 | `steps(label, 16)` | The lane of steps that the two above, and a row of a grid, are made of, to use for anything: a row of accents, a setting that changes each step. Tap and drag across; `levels=True` makes each a bar, `accents=True` gives an accent to a step you drag up on. `steps(label, target, "setting")` ties it to a setting. |
 | `drum_seq(label, drums, target)` | A drum sequencer that plays by itself: see below. |
 
-Each has `value` (a list: levels from 0 to 1 for a gate or a lane, and for an arpeggio a step each, a dict with `note`, `octave`, `tie`, `accent` and `slide`, note 0 for a rest), `text` (the same as text), `length`, and `step`: set `gate.step = 3` and that step is lit as the one sounding. Any of `value` and `text` may be set, and `on_change(value)` hears a hand, a frame later.
+Each has `value` (a list: levels from 0 to 1 for a gate or a lane, and for an arpeggio a step each, a dict with `note`, `octave`, `tie`, `accent`, `slide` and `length`, where note 0 is a rest and length 0 is the arpeggio's own), `text` (the same as text), `length`, and `step`: set `gate.step = 3` and that step is lit as the one sounding. Any of `value` and `text` may be set, to a list, to text or to a built-in pattern's name, and `on_change(value)` hears a hand, a frame later.
 
-**As text**, a pattern can be saved, pasted into your code and handed to a target that keeps it that way:
+**As text**, a pattern is exactly what the sound engine reads ([synths.js](https://github.com/johnwylie70/synths.js), and a song's file), so it can be saved, pasted into your code and handed to a synth:
 
 | | |
 |---|---|
-| a gate, a lane, a drum's row | one mark a step: `.` off, `x` on, `X` on with an accent, `1` to `9` on at that many tenths. Spaces and `\|` are for the eye: `"x...x... \| x.5.X..."`. |
-| an arpeggio | words with spaces between: `1` `2` `3` that note of the chord, `-` a rest, `_` the note before held on; after a note `^` an octave up (`v` down), `!` an accent, `~` a slide: `"1 - 3 2 _ 1! 3~ 5^"`. |
+| a gate | one mark a step: `.` off, `x` on, `1` to `8` on at that many ninths (`0` is off and `9` is on). Spaces are for the eye: `"x...x... x.5.x..."`. A gate has no accents. |
+| a drum's row, a lane, a row of a grid | the same marks and also `X`, on with an accent, and `\|` for the eye as well as a space. **This is not a gate pattern**, though it looks like one: it is this library's own, for a drum sequencer and a lane, and is not to be handed to a synth as its gate (nor a gate's text to a drum sequencer as a row with accents). |
+| an arpeggio | steps with a space between: `1` `2` `3` that note of the chord, `-` (or `.`) a rest, `_` the note before held on; after a note `'` an octave up (`,` down), `^` an accent, `:1` to `:9` its own length in tenths of a step; before a note `~` slide into it: `"1 - 3 2 _ 1^ ~3 5':4"`. |
 
-**Tied to a target**, a pattern is ONE setting of it, found by name when you give none (`gate_pattern`, `arp_pattern`, or `pattern`). It is read and written as the target keeps it: as text if the setting is text, else as a list. `describe(name)` may say `max` (the most steps) and, for an arpeggio, `notes`, `octaves` and `slide`. A target that has `step()` or `position()` lights the step that is sounding. The settings that go with it are put beside it on the same plate when the target has them (a rate, depth, smoothing and swing for a gate; a rate, order, octaves, length and style for an arpeggio): a `select` for one that is a choice and a small dial for a number. `beside=False` leaves them out. The marks of the text and the names looked for are each one small table in `dials.js` (`STEP_MARKS`, `ARP_MARKS`, `BESIDE`), and the marks again in `pydials` (`STEP_MARKS`, `ARP_MARKS`), so they are changed in one place each.
+**Tied to a target**, a pattern is ONE setting of it: `tranceGate` and `arpPattern` on a synth (`trance_gate`, `arp_pattern` and plain `pattern` are looked for too, and you may name another). It is read and written as the target keeps it: as text if the setting is text (a synth's is, and is `""` when it has none), else as a list. `describe(name)` may say `steps` (the most there can be) and `patterns` (its own built-in patterns, by name). The step that is sounding is lit when the target says which: a synth's `tranceGateStep` and `arpStep` settings, or a `step()` or `position()` of the target's own. On the same plate go a `select` of the built-in patterns and, for a gate, the settings that go with it when the target has them (`tranceGateDepth`, `tranceGateRate`, `tranceGateSmooth`, `tranceGateSwing`, `tranceGateSends`, `tranceGateStereo`): a small dial for a number and a switch for one that is on or off. `beside=False` leaves them out. The marks of the text, the built-in patterns and the names looked for are each one small table in `dials.js` (`STEP_MARKS`, `ARP_MARKS`, `GATE_NAMED`, `ARP_NAMED`, `BESIDE`), and the marks and patterns again in `pydials`, so they are changed in one place each.
 
 ![A drum sequencer: play, a tempo of 124 with a minus and a plus, swing, four rows of sixteen steps for kick, snare, hat and clap with the seventh column lit and the clap's row muted, a breakbeat chosen, and clear](images/dials-drum-seq.png)
 
 ```py
-drums = drum_seq("beat", ["kick", "snare", "hat", "clap"], make_synth("kick"), pattern="backbeat", tempo=110)
+kit = {"kick": make_synth("kick"), "snare": make_synth("snare"), "hat": make_synth("hat")}
+beat = drum_seq("beat", ["kick", "snare", "hat"], targets=kit, notes=[36, 52, 60], pattern="backbeat", tempo=110)
 ```
 
 `drum_seq` is a whole drum machine in one control. Tap a step on and off, drag across to paint, and drag up on a step for an accent. Tap a drum's name to hear it and the dot beside it to mute its row. Its own strip has play and stop, the tempo (− and +, or tap the number in time), swing, starter patterns (four on the floor, a backbeat, a breakbeat) and clear. On a phone it shows as many steps as fit a finger, a page at a time, and turns the page as it plays.
 
-It plays whatever it is given: `target` (or `targets=`, a list or a dict by the drums' names) is anything with `note_on(note, velocity)`, and each row plays its drum's note (a kick is 36, a snare 38, a hat 42, a clap 39; `notes=` says otherwise). `on_step(drum, step, velocity)` hears every step that sounds. From code: `drums.play()`, `drums.stop()`, `drums.tempo`, `drums.swing`, `drums.pattern("breakbeat")`, `drums.mute("hat")`, `drums.get("kick", 0)`, `drums.put("kick", 0)`, `drums.value` (the rows) and `drums.text` (a line of marks for each drum).
+It plays whatever it is given: `target` (or `targets=`, a list or a dict by the drums' names) is anything with `note_on(note, velocity)`, and each row plays its drum's note (a kick is 36, a snare 38, a hat 42, a clap 39; `notes=` says otherwise). `on_step(drum, step, velocity)` hears every step that sounds. From code: `beat.play()`, `beat.stop()`, `beat.tempo`, `beat.swing`, `beat.pattern("breakbeat")`, `beat.mute("hat")`, `beat.get("kick", 0)`, `beat.put("kick", 0)`, `beat.value` (the rows) and `beat.text` (a line of marks for each drum).
 
 **Keeping time.** The page plays the beat, not Python, so a target that lives in the page (a synth) is in time however busy Python is. If that target (or `clock=`) offers `time()`, in seconds, it is handed each step a little before it is due, as `noteOn(note, velocity, { at })`, to play at exactly that time; with no such clock a step is played on the frame it falls due, and the beat will wobble when the page is busy. A Python object given as a target is played a frame after its step.
 
@@ -517,6 +527,12 @@ with group("music"):
     accents = steps("accent", 8)
 with group("a drum machine in one line"):
     drum_seq("beat", ["kick", "snare", "hat"], kick, pattern="backbeat", tempo=110)
+pad = make_synth("pad")
+pad.trance_gate = "trance"
+lead.arp_pattern = "bounce"
+with group("patterns"):
+    trance_gate("gate", pad)                # the pad's trance gate, drawn and edited
+    arp_pattern("arp", lead)                # the lead's arpeggio pattern
 bar = progress("time")
 ready = light("ready", True)
 x, t, last = 0.5, 0, -1

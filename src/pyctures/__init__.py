@@ -1890,6 +1890,7 @@ def start(source, info_json):
         _midi_hooks(ns)
         if S.scenes is not None:
             S.scenes.begin(ns)
+        S.dt = 0.0
         _call_frame_functions(0.0)
     except BaseException as e:  # noqa: BLE001 — every failure is the user's to read
         msg, line = _format_error(e)

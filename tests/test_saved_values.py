@@ -125,7 +125,7 @@ print("count", count, load("count"), load("list"))
 @pytest.fixture(scope="module")
 def browser():
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch(args=["--mute-audio"])
+        b = p.chromium.launch(args=["--mute-audio", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"])
         yield b
         b.close()
 

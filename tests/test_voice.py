@@ -65,7 +65,7 @@ HEARD = """() => {
 @pytest.fixture(scope="module")
 def browser():
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--use-fake-device-for-media-stream"])
+        b = p.chromium.launch(args=["--mute-audio", "--use-fake-ui-for-media-stream", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--use-fake-device-for-media-stream"])
         yield b
         b.close()
 

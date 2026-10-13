@@ -61,7 +61,7 @@ CONTROLS = """async () => {
 @pytest.fixture(scope="module")
 def browser():
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+        b = p.chromium.launch(args=["--mute-audio", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
         yield b
         b.close()
 

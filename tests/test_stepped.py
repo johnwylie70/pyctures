@@ -106,7 +106,7 @@ window.film = async (fps, frames) => {
 def browser():
     playwright = pytest.importorskip("playwright.sync_api")
     with playwright.sync_playwright() as p:
-        b = p.chromium.launch(args=["--mute-audio", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
+        b = p.chromium.launch(args=["--mute-audio", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"])
         yield b
         b.close()
 

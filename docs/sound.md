@@ -332,6 +332,77 @@ now = sound_buffer()             # {"frames": 4096, "delay": 179, "thread": "pag
 
 A page that is not served over https (`pyctures run` opened on a phone or an iPad by the computer's address) makes its sound on the page's own thread, a buffer at a time, and clicks when the page is busy for longer than a buffer lasts. A larger buffer rides over that and is heard later: `"large"` is about a fifth of a second from a key to its note, `"small"` a twentieth. `"auto"` lets the page choose, and double it once if it keeps clicking. It may be called before the first sound or at any time. `delay` is the milliseconds from a key to its note, `underruns` counts the clicks, and `thread` is `"page"` there and `"audio"` on an https page or on the computer itself, where there is nothing to fix and the same call sets how far ahead everything is scheduled instead. What `sound_buffer()` says is what the page last said: a frame late, and all zeros before it has.
 
+## A sound button, and asking first
+
+Two lines, each for its own job. Neither happens unless you write it. Neither needs an import: they are Pyctures' own, like `Sprite` and `save`, and a page loads the little they take only for a scene that names one.
+
+### The button
+
+```py
+sound_button()
+```
+
+A small speaker in a corner of the scene. A click or a tap on it switches all of the scene's sound off, and another switches it back on; the picture on it shows which. The **M** key does the same while the scene has the keyboard. The choice is remembered for this scene on this device, with its [saved values](saved-values.md), so a scene that was switched off is still off the next time. It asks nothing: your game starts as it always did.
+
+```py
+sound_button("bottom left")          # a corner: "top right" unless you say, "bottom right", "top left"
+```
+
+| Option | What it does |
+|---|---|
+| `corner` | `"top right"`, `"bottom right"`, `"top left"` or `"bottom left"` |
+| `size` | How many points across. Unless you say: 34 with a mouse, 44 where a finger does the pointing |
+| `inset` | How far in from the two edges of its corner, in points: a number, or `(across, down)` to sit beside something your scene draws in that corner. Unless you say: 8, or 10 for a finger |
+| `colour` | `"auto"` looks at the scene under the button and is light on a dark scene and dark on a light one; or say `"light"` or `"dark"` |
+| `key` | The key that switches the sound: `"m"` unless you say, `None` for none |
+
+- **The page draws it, not your scene.** It is laid over the picture, and the page does the switching at once, however busy Python is. It keeps off any [dials and sliders](dials.md), and goes when the scene stops. A tap on it is not a tap on your game: `on_mouse_down` is not called.
+- **A scene that reads M itself** (it has `"m"` in its code) keeps M, and the button leaves it alone.
+
+To read the switch, or turn it yourself:
+
+```py
+sound = sound_button()
+
+def draw():
+    background("midnightblue")
+    if not sound_is_on():
+        text("Sound is off: press M", 20, 30, "white", 16)
+```
+
+`sound_is_on()` is `True` or `False`. `sound.on` is the same thing, and can be set: `sound.on = False`. `sound.over(x, y)` says whether a point of the scene is on the button, and `sound.remove()` takes the button away. `mute_sound()` and `unmute_sound()` are the same switch: the button shows what they did. Only what a person chose is remembered, not what your code switched.
+
+The page holds the switch, and tells Python with the next frame. So after a tap, or after `mute_sound()`, `sound_is_on()` is right one frame later; after `sound.on = False` it is right at once.
+
+### Asking first, in a demo
+
+A demo is something other people open, perhaps in a quiet room. One line has it ask before it makes a sound:
+
+```py
+ask_about_sound()
+```
+
+Before anything is heard a card is laid over the scene: "This demo has sound", with two big buttons, "Play with sound" and "Play without sound". Nothing sounds until one is chosen, and the game waits behind the card: its first frame is shown, and `update` and `draw` are not called again until the answer. "Play with sound" is also the click a browser needs before it lets a page make sound. The line puts the sound button up as well, if the scene has not, so a demo needs only this one line.
+
+It is for demos you publish. A game of your own does not need it, and nothing shows the card unless the scene has this line.
+
+```py
+ask_about_sound("Music and sound effects")                      # say what kind of sound it is
+ask_about_sound(with_sound="Sound on", without_sound="Quiet")
+```
+
+| Option | What it does |
+|---|---|
+| `title`, `with_sound`, `without_sound` | The card's words. The title can be given by itself, first |
+| `remember` | `True` asks only until there is an answer, and uses that answer from then on |
+| `wait` | `False` keeps the scene running behind the card (still silent) |
+| `corner`, `size`, `inset`, `colour`, `key` | For the button it puts up, as above |
+
+- **When it asks.** Every time the scene is opened afresh, with last time's answer ready under Enter: the card is there so that nobody is surprised, and yesterday's answer is not today's. It does not ask again when the scene is run again within five minutes of an answer, so working on a demo is not a card at every run.
+- **Keys on the card.** Enter or Space presses the button that has the keyboard, the arrows or Tab go between the two, and Escape is "Play without sound". No key and no tap reaches the game while the card is up.
+- **What was asked for before the answer.** A sound effect or a note is dropped, because played late it would be wrong; a tune that repeats, or a song, starts at "Play with sound".
+- While the card is up `sound_is_on()` is `False` and `sound.asking` is `True`.
+
 ## Songs
 
 A song is a whole piece of music in one file, played by the sound engine itself: a tracker's `.mod` or `.xm` file, or a song in synths' own format.

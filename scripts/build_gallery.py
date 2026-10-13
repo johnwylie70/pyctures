@@ -211,10 +211,18 @@ class Serve:
         self.httpd.shutdown()
 
 
+def quiet(page):
+    """A scene with sound asks first, and waits: "Play without sound", so the picture is of the scene and not of the card."""
+    page.wait_for_function("(() => { const s = document.querySelector('[data-pyctures-src]').pycturesScene; return s && s.r.shown > 0 })()", timeout=120000)
+    if page.locator("[data-sound-card]").count():
+        page.click("[data-sound-card] button[data-answer=off]")
+
+
 def open_scene(browser, url, size):
     page = browser.new_page(viewport={"width": size[0], "height": size[1]}, device_scale_factor=1)
     page.goto(url)
     page.wait_for_selector('[data-pyctures-status="running"]', timeout=120000)
+    quiet(page)
     return page, page.locator(".scene")
 
 
@@ -284,6 +292,7 @@ def readme_stills():
                     page = b.new_page(viewport={"width": 640, "height": 360}, device_scale_factor=2)
                     page.goto(server.url + name + "/index.html")
                     page.wait_for_selector('[data-pyctures-status="running"]', timeout=120000)
+                    quiet(page)
                     page.wait_for_timeout(2500)
                     target = ROOT / "docs" / "images" / (name + ".jpg")
                     page.screenshot(path=str(target), type="jpeg", quality=85)

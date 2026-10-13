@@ -1866,6 +1866,9 @@ def start(source, info_json):
             _scenes_library().begin_run(ns, info)
         except ImportError:
             pass   # a page that did not bring the library: the file's own mention of a scene is then a name that is not there
+    if "sound" in source:   # the sound button
+        try: __import__("pymanners").begin_run(ns, info, source)
+        except ImportError: pass
     old_out, old_err = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = S.out, S.err
     tracer = _Traced()

@@ -136,7 +136,7 @@ mount(el, {
     wasm: engineBytes,                         // the engine's bytes, for a page that may not fetch them
     worklet: "blob",                           // how the audio worklet is loaded: "blob", "file" or an address
     latency: 0.06,                             // seconds everything is played ahead
-    onState(state) {},                         // "waiting" (for a tap), "on" or "failed"
+    onState(state) {},                         // "waiting" (for a tap), "on" or "failed"; and "asking" or "off" from a scene with a sound button
   },
 })
 ```
@@ -146,6 +146,7 @@ mount(el, {
 - **One clock.** Every time in a batch is on the page's clock, `performance.now() / 1000`, whether the command came from Python (whose own clock may be another computer's) or from a key or a dial on the page. `now` is that clock when the batch was handed over.
 - **`read(id, scope)`** gives `{ samples, level: [left, right], notes }` for one synth, or for all the sound when there is no id, as `player.read(id, scope)` does. Without it scopes and meters stay flat.
 - **Without `send`** the page plays the sound itself, and `synths`, `wasm` and `worklet` say where its parts come from, so a page that may fetch nothing (a sandboxed frame) still has sound. They are `createPlayer`'s options. `dials`, beside `sound`, is `dials.js` in the same way: the module, a promise of it, or its address.
+- **`onState(state)`** is for an app's own "tap for sound". A demo that [asks about sound](sound.md#a-sound-button-and-asking-first) asks for itself: while its card is up the app is told `"asking"`, and while its sound is switched off `"off"`, in place of `"waiting"`, so there is nothing to ask a tap for. With `send`, the card's answer and the button reach the app as `{ op: "master", mute }` in the scene's scope, and the wait behind the card as `pause`.
 - **`onMidi(listener, scope)`**, with `send`: the `midi` commands of a scene that uses MIDI are in the batches you are sent, and this is how what your player received comes back. Pass it straight to your player (`onMidi: (listener, scope) => player.onMidi(listener, scope)`); it gives back a function that stops it.
 - **`onSoundEvents(listener, scope)`**, with `send`: how what your player says back reaches the scene (the microphone is on or is not, a recording is over, a file is saved). Pass it to your player in the same way (`player.onSoundEvents`). With it a scene's `take.done` and `mic.state` work; without it they never change. `songPosition()`, also with `send`, is where your player's song is, for a scene that draws it.
 - **No `eval` is needed**, for sound or for dials. A page's policy has to allow `'wasm-unsafe-eval'` (the engine is WebAssembly) and, for the worklet from a Blob, `blob:` in `script-src`; `worklet: "file"` loads `synths-worklet.js` by its address instead.

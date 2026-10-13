@@ -627,6 +627,9 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `set_tempo(bpm)`, `beats(n)`, `beat()`, `length_beats(name)`, `sound_time()` | The beat, and the sound clock |
 | `set_sound_buffer(size)`, `sound_buffer()` | How much sound is made at a time (`"small"`, `"medium"`, `"large"`, `"auto"`, or frames), for a page that clicks; and what it is now |
 | `set_volume(v)`, `mute_sound()`, `unmute_sound()`, `stop_sound()` | All the sound |
+| `sound_button(corner, …)` | Pyctures' own, with no import: a small speaker in a corner that switches the scene's sound off and on (so does M), remembered for next time. It asks nothing. `size`, `inset`, `colour`, `key`. Gives `on`, `over(x, y)` and `remove()` |
+| `ask_about_sound(title, …)` | For a demo: a card before anything is heard, "This demo has sound", "Play with sound" or "Play without sound", and the scene waits for the answer. It puts the sound button up too. `with_sound`, `without_sound`, `remember`, `wait`, and the button's |
+| `sound_is_on()` | Is the scene's sound on? `False` once it is switched off, and while the card is asking |
 | `main_synth()`, `sound_output()` | The synth `play_note` uses, and all the sound together, for dials and scopes |
 | `sound_names()`, `synth_names()`, `setting_names()` | What there is |
 | `play_song(path)` | A song from a file (`.mod`, `.xm`): `.pause()`, `.resume()`, `.stop()`, `.seek(part)`, `.volume` |

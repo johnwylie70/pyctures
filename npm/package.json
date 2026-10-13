@@ -11,7 +11,9 @@
     "./pyctures.py": "./pyctures.py",
     "./three/*": "./three/*",
     "./synths/*": "./synths/*",
-    "./dials/*": "./dials/*"
+    "./dials/*": "./dials/*",
+    "./scenes/*": "./scenes/*",
+    "./manners/*": "./manners/*"
   },
   "files": [
     "pyctures.js",
@@ -19,6 +21,8 @@
     "three/",
     "synths/",
     "dials/",
+    "scenes/",
+    "manners/",
     "README.md",
     "LICENSE",
     "THIRD-PARTY-NOTICES"

@@ -1,8 +1,13 @@
 # Snake: eat the apples and grow, without running into a wall or yourself. It is played on a grid of squares, and your best score is kept.
 # Use: the arrow keys turn the snake. Or tap the side of its head you want it to turn to.
-# Try changing: SQUARE, the size of a square; 0.15, the seconds between steps (smaller is faster); the colours in draw().
+# Try changing: SQUARE, the size of a square; 0.15, the seconds between steps (smaller is faster); the colours in draw();
+# the sounds, a line each: look for play_sound ("coin" to "pop" or "powerup").
 #
 # Run it:   pyctures run snake.py
+
+from synths import *
+
+sound_button("bottom right")    # a speaker in the corner to switch the sound off (so does M)
 
 SQUARE = 24                     # the size of one square of the grid
 
@@ -41,8 +46,10 @@ def move_apple():
 # Turn, unless that would send the snake straight back into itself.
 def turn_to(x, y):
     global turn
-    if (x, y) != (-going[0], -going[1]):
-        turn = (x, y)
+    if (x, y) == (-going[0], -going[1]):
+        return
+    if (x, y) != turn: play_sound("click", 0.3)
+    turn = (x, y)
 
 def on_key_down(key):
     global waiting
@@ -74,6 +81,7 @@ def step():
     outside = head[0] < 0 or head[1] < 0 or head[0] >= columns or head[1] >= rows
     if outside or head in snake:
         alive = False
+        play_sound("win" if score > best else "lose", 0.6)
         if score > best:
             best = score
             save("best", best)  # still there the next time you play
@@ -81,6 +89,7 @@ def step():
     snake.insert(0, head)       # a new head at the front
     if head == apple:
         score += 1
+        play_sound("coin", 0.5, pitch=min(score, 12))    # each apple a little higher, up to an octave
         move_apple()
     else:
         snake.pop()             # and the tail moves up, unless it has just eaten

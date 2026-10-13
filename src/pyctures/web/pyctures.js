@@ -885,6 +885,7 @@ export const LIBRARIES = {
   // Scenes are not imported: a file that names one (a class with Scene in its brackets, or a call of scene(), go(),
   // next_scene(), config() or section()) is given them. Python asks the same of the same text (_USES_SCENES), and so does `pyctures build`.
   pyscenes: { folder: 'scenes', js: 'scenes.js', py: 'pyscenes.py', uses: /(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|section)[ \t]*\()/m },
+  pymanners: { folder: 'manners', js: 'manners.js', py: 'pymanners.py', uses: /sound_button|sound_is_on|ask_about_sound/ },
 }
 
 const libraries = {}
@@ -2121,6 +2122,7 @@ export class Scene {
           isActive: () => activeScene === this,
         },
       })
+      if (libs.pymanners) libs.pymanners.keep(this, source, () => activeScene === this)
       r.measuring = measureSwitch(this.el)
       this.watch()
       r.acc = { frames: 0, shown: 0, missed: 0, worst: 0, cmds: 0, ms: {} }

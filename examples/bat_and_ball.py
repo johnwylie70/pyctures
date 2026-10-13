@@ -1,8 +1,13 @@
 # Bat and Ball: keep the ball out of your goal, and get it past the computer's bat. First to 5 wins.
 # Use: up and down move your bat, the left one. Or drag up and down.
-# Try changing: 230, the computer's speed (bigger is harder); 90, how tall the bats are; 1.08, how much faster the ball gets with each hit.
+# Try changing: 230, the computer's speed (bigger is harder); 90, how tall the bats are; 1.08, how much faster the ball gets with each hit;
+# the sounds, a line each: look for play_sound ("blip" to "pop" or "bounce", or 0.5, how loud).
 #
 # Run it:   pyctures run bat_and_ball.py
+
+from synths import *
+
+sound_button()                  # a speaker in the corner to switch the sound off (so does M)
 
 you = Sprite.box(0, 0, 14, 90)
 computer = Sprite.box(0, 0, 14, 90)
@@ -48,6 +53,7 @@ def hit_ball(bat, direction):
     ball.vx = direction * abs(ball.vx) * 1.08
     ball.vy = (ball.y - bat.y) * 9
     ball.limit(900)
+    play_sound("blip", 0.5, pitch=direction * 3)       # your bat a little higher than the computer's
 
 def update(dt):
     global wait, your_score, computer_score
@@ -60,15 +66,17 @@ def update(dt):
     if wait > 0:
         return
     ball.update(dt)
-    ball.bounce("top", "bottom")
+    if ball.bounce("top", "bottom"): play_sound("click", 0.4)
     # Only a ball coming towards a bat is sent back, so it can never stick to one.
     if ball.vx < 0 and ball.touches(you): hit_ball(you, 1)
     if ball.vx > 0 and ball.touches(computer): hit_ball(computer, -1)
     if ball.x < 0:
         computer_score += 1
+        play_sound("lose" if game_over() else "zap", 0.5)
         serve(1)
     if ball.x > width:
         your_score += 1
+        play_sound("win" if game_over() else "coin", 0.6)
         serve(-1)
 
 def on_mouse_down(x, y):

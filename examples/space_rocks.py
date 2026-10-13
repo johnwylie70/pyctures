@@ -1,8 +1,13 @@
 # Space Rocks: steer a ship, shoot the rocks, and do not get hit. A rock breaks in two when it is shot.
 # Use: left and right turn, up fires the engine, space shoots. Or tap to shoot, and hold to fly towards your finger.
-# Try changing: 3, the rocks in a wave; 500, the speed of a bullet; 7, the sides of a rock.
+# Try changing: 3, the rocks in a wave; 500, the speed of a bullet; 7, the sides of a rock;
+# the sounds, a line each: look for play_sound ("laser" to "zap" or "shoot") and the little tune in play_notes.
 #
 # Run it:   pyctures run space_rocks.py
+
+from synths import *
+
+sound_button()                  # a speaker in the corner to switch the sound off (so does M)
 
 # A sprite's picture is drawn round 0, 0, facing right.
 def draw_ship(size):
@@ -48,6 +53,7 @@ def shoot():
     bullet.angle = ship.angle
     bullet.push(500)            # off it goes, the way the ship faces
     bullets.append(bullet)
+    play_sound("laser", 0.3)
 
 def on_mouse_down(x, y):
     global held
@@ -82,6 +88,7 @@ def update(dt):
         for i in range(3):
             add_rock(0, random(height), 80)
         safe = 2
+        if score > 0: play_notes("C5 E5 G5 C6", 0.08, volume=0.4)     # a wave is cleared
     safe -= dt
     steer(dt)
     ship.update(dt)
@@ -97,6 +104,7 @@ def update(dt):
             remove(bullets, bullet)
             remove(rocks, rock)
             score += 10
+            play_sound("explosion", 0.5, pitch=-5 if rock.size > 40 else 0 if rock.size > 20 else 7)   # a small rock pops higher
             if rock.size > 20:  # a big rock breaks in two
                 add_rock(rock.x, rock.y, rock.size / 2)
                 add_rock(rock.x, rock.y, rock.size / 2)
@@ -104,6 +112,7 @@ def update(dt):
             remove(bullets, bullet)
     if safe <= 0 and ship.hit(rocks):
         lives -= 1
+        play_sound("lose" if lives == 0 else "hit", 0.7)
         new_ship()
 
 def draw():

@@ -1,8 +1,13 @@
 # Brick Breaker: bounce the ball off your bat and knock out every brick. You have 3 balls.
 # Use: left and right move the bat. Or drag left and right.
-# Try changing: COLOURS, one for each row of bricks; 100, how wide the bat is; -330, how fast the ball goes up.
+# Try changing: COLOURS, one for each row of bricks; 100, how wide the bat is; -330, how fast the ball goes up;
+# the sounds, a line each: look for play_sound ("pop" to "coin", or 3, how much higher each row sounds).
 #
 # Run it:   pyctures run brick_breaker.py
+
+from synths import *
+
+sound_button()                  # a speaker in the corner to switch the sound off (so does M)
 
 COLOURS = ["tomato", "orange", "gold", "mediumseagreen", "dodgerblue"]   # one for each row
 
@@ -57,18 +62,23 @@ def update(dt):
         ball.x = bat.x                    # the ball waits on the bat
         return
     ball.update(dt)
-    ball.bounce("left", "right", "top")
+    if ball.bounce("left", "right", "top"): play_sound("click", 0.4)
     # Off the bat the ball goes up, and further sideways the nearer the end it met.
     if ball.vy > 0 and ball.touches(bat):
         ball.vy = -ball.vy
         ball.vx = (ball.x - bat.x) * 7
+        play_sound("bounce", 0.5)
     brick = ball.hit(bricks)
     if brick:
         remove(bricks, brick)
         ball.vy = -ball.vy
         score += 1
+        row = round((brick.y - 70) / 26)
+        play_sound("pop", 0.6, pitch=(4 - row) * 3)     # the higher the row, the higher the pop
+        if not bricks: play_sound("win", 0.6)
     if ball.y > height:
         lives -= 1
+        play_sound("lose" if lives == 0 else "zap", 0.5)
         serve()
 
 def on_mouse_down(x, y):

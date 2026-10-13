@@ -33,7 +33,7 @@ def main():
     # `from synths import *`, `from pydials import *`, `from pynotation import *` and `from pyvisualfx import *` work with nothing more to install: Pyctures
     # carries a copy of each. They are looked for last, so a copy you have installed yourself is the one used.
     web = os.path.join(os.path.dirname(os.path.abspath(pyctures.__file__)), "web")
-    sys.path.extend(os.path.join(web, name) for name in ("synths", "dials", "scenes", "notation", "visualfx"))
+    sys.path.extend(os.path.join(web, name) for name in ("synths", "dials", "scenes", "notation", "visualfx", "manners"))
 
     for line in sys.stdin:
         line = line.strip()

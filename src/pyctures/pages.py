@@ -42,6 +42,9 @@ ASSETS = {
     "visualfx/visualfx.js": WEB / "visualfx" / "visualfx.js",
     "visualfx/pyvisualfx.py": WEB / "visualfx" / "pyvisualfx.py",
     "visualfx/LICENSE": WEB / "visualfx" / "LICENSE",
+    # The sound button (`sound_button()`): Pyctures' own, loaded only for a file that names it.
+    "manners/manners.js": WEB / "manners" / "manners.js",
+    "manners/pymanners.py": WEB / "manners" / "pymanners.py",
 }
 
 # The libraries a scene asks for by importing them: the name it imports -> (its folder, the page's half,
@@ -52,16 +55,22 @@ LIBRARIES = {
     "pyscenes": ("scenes", "scenes.js", "pyscenes.py"),
     "pynotation": ("notation", "notation.js", "pynotation.py"),
     "pyvisualfx": ("visualfx", "visualfx.js", "pyvisualfx.py"),
+    "pymanners": ("manners", "manners.js", "pymanners.py"),
 }
 
 # Scenes are not imported: a file that names one is given them (the same words as pyctures.js and the Python half).
 USES_SCENES = re.compile(r"(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|section)[ \t]*\()", re.M)
+
+# Nor is the sound button: a file that names sound_button, sound_is_on or ask_about_sound is given it.
+USES_MANNERS = re.compile(r"sound_button|sound_is_on|ask_about_sound")
 
 
 def uses_library(source, name):
     """Whether a scene imports a library (the same test the browser half makes)."""
     if name == "pyscenes":
         return USES_SCENES.search(source) is not None
+    if name == "pymanners":
+        return USES_MANNERS.search(source) is not None
     # (A scene with sheet music has the sound too: its music is played through it, and lit by its clock.)
     names = "synths|pynotation" if name == "synths" else name
     return re.search(r"^[ \t]*(?:from|import)[ \t]+(?:%s)\b" % names, source, re.M) is not None

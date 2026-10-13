@@ -8,6 +8,8 @@
 
 from synths import *
 
+sound_button()                  # a speaker in the corner to switch the sound off (so does M)
+
 basket = Sprite("🧺", 200, 300, size=64)
 things = []
 score = 0

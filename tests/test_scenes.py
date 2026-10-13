@@ -428,7 +428,8 @@ def test_scenes_are_a_library_that_only_a_file_naming_a_scene_is_given(tmp_path)
     assert "scenesKeeper(container" not in without and "class _Stage" not in without and "pyctures-bar" not in without
     assert "scenesKeeper(container" in with_scenes and "class _Stage" in with_scenes
     # A page with no scenes is the size it was: all of scenes but the few lines that ask for it is in the library.
-    assert len(with_scenes) - len(without) > library and len(without) < 195_000
+    # (194 000 characters before a scene could be stepped for a recorder; 199 000 with it.)
+    assert len(with_scenes) - len(without) > library and len(without) < 215_000
     start("def draw():\n    ctx.fill_rect(0, 0, 1, 1)\n")
     assert pyctures.S.scenes is None and "Scene" not in pyctures.S.ns
 

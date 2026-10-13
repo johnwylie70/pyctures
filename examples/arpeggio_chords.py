@@ -15,17 +15,17 @@ COLOURS = ["#e76f51", "#2a9d8f", "#e9c46a", "#8ab6f9"]
 
 voice = make_synth("chip_lead", volume=0.6)
 bass = make_synth("chip_bass", volume=0.7)
-chord = None              # the arpeggio that is sounding
+arp = None                # the arpeggio that is sounding
 playing = -1
 
 def play(i):
-    global chord, playing
+    global arp, playing
     playing = i
     root = chord_notes(CHORDS[i])[0]
-    if chord is None:
-        chord = voice.start_arp(CHORDS[i], speed=40, order="up")
+    if arp is None:
+        arp = voice.start_arp(CHORDS[i], speed=40, order="up")
     else:
-        chord.change(CHORDS[i])              # another chord, and the note carries on
+        arp.change(CHORDS[i])              # another chord, and the note carries on
     bass.play(root - 24, 0.4)
 
 def box(i):
@@ -39,12 +39,12 @@ def on_mouse_down(x, y):
             play(i)
 
 def on_key_down(key):
-    global chord, playing
+    global arp, playing
     if key in ("1", "2", "3", "4"):
         play(int(key) - 1)
-    if key == " " and chord is not None:     # space: quiet
-        chord.stop()
-        chord, playing = None, -1
+    if key == " " and arp is not None:     # space: quiet
+        arp.stop()
+        arp, playing = None, -1
 
 def draw():
     background("#0f1020")
@@ -53,4 +53,4 @@ def draw():
         rect(bx, by, bw, bh, COLOURS[i] if i == playing else "#24263f", round=14)
         text(name, bx + bw / 2, by + bh / 2, "white", 36, "centre")
         text(str(i + 1), bx + bw / 2, by + bh - 18, "#c8cbe0", 14, "centre")
-    text("Click a chord", width / 2, 60, "white", 22, "centre")
+    text("Click a arp", width / 2, 60, "white", 22, "centre")

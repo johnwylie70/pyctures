@@ -69,6 +69,41 @@ A note is a letter and a number: `"C4"` is middle C, `"A4"` is the A above it, `
 
 A tune keeps exact time however busy the scene is, because the sound engine keeps the time, not your program.
 
+## A tune, one note a line
+
+`play_note` plays a note now. `note` plays the **next** note of a tune: each one begins where the one before it ended, so a tune is written as ordinary lines, with loops and ifs.
+
+```python
+from synths import *
+
+def on_mouse_down(x, y):
+    start_lines()
+    set_tempo(100)
+    note("E4", "quarter")
+    note("G4", "quarter")
+    rest("quarter")
+    note("C5", "half")
+    for name in ["C4", "D4", "E4"]:
+        note(name, "eighth")
+    chord("Cm", "whole")
+
+def draw():
+    background("midnightblue")
+    text("Click for a tune", width / 2, height / 2, "white", 28, "centre")
+```
+
+A length is a note length by name, measured against the tempo (`"whole"`, `"half"`, `"quarter"`, `"eighth"`, `"sixteenth"`; `"quarter."` is half as long again), or a number of beats. The same names work wherever a length is wanted, and there a number is seconds: `play_note("C4", "half")`, `play_note("C4", 0.5)`.
+
+Every synth has a line of its own (`lead.note("C4", "eighth")`, `bass.note("C2", "half")`), and lines written one after the other begin together. `with loop_notes():` has what is written inside go round, kept in time by the sound engine:
+
+```py
+kick, snare = make_synth("kick"), make_synth("snare")
+with loop_notes() as drums:
+    kick.note("C3", "quarter")
+    snare.note("A3", "quarter")
+drums.stop()
+```
+
 ## A synth of your own
 
 ```python
@@ -90,12 +125,13 @@ def draw():
 | Call | What it does |
 |---|---|
 | `lead.play("E4", 0.5)` | A note for half a second. No note at all plays the synth's own (a drum's) |
-| `note = lead.start("E4")` | A note that stays until `note.stop()`. `note.slide_to("G4", 0.5)` slides it |
+| `held = lead.start("E4")` | A note that stays until `held.stop()`. `held.slide_to("G4", 0.5)` slides it |
+| `lead.note("E4", "quarter")` | The next note of this synth's line: see [A tune, one note a line](#a-tune-one-note-a-line) |
 | `lead.stop()` | Let go of every note |
 | `lead.play_notes("C4 E4 G4", 0.25)` | A tune on this synth |
 | `lead.cutoff = 800` | Change a setting; notes already sounding change too. `print(lead.cutoff)` reads it back |
 | `lead.set(cutoff=4000, slide=2)` | Slide there over two seconds |
-| `lead.arp("Cm7")`, `chord = lead.start_arp("Am")` | A chord from one voice, as a fast arpeggio. `chord.change("F")` changes it as it plays |
+| `lead.arp("Cm7")`, `arp = lead.start_arp("Am")` | A chord from one voice, as a fast arpeggio. `arp.change("F")` changes it as it plays |
 
 The settings you will use most:
 

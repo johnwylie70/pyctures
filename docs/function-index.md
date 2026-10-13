@@ -586,12 +586,14 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `play_sound(name)` | A ready-made game sound: `coin`, `jump`, `laser`, `explosion` and ten more |
 | `play_note(note, length, volume)` | A note, or a chord |
 | `play_notes(notes, step)` | A tune; `repeat=True` goes round until `.stop()` |
+| `note(note, length)`, `chord(name, length)`, `rest(length)` | A tune a line at a time: each begins where the last ended. A length is `"quarter"`, `"eighth"`, or a number of beats |
+| `loop_notes()`, `start_lines()` | `with loop_notes():` has a section go round; `start_lines()` begins every line again |
 | `make_synth(name, ...)` | A synth of your own: `.play`, `.start`, `.stop`, `.play_notes`, `.arp`, and its settings as attributes |
 | `load_sample(path)` | A recorded sound from a file, as a synth |
 | `play_arp(chord)`, `start_arp(chord)` | A chord from one voice, as a fast arpeggio |
 | `chord_notes(name)`, `note_number(note)` | The notes of a chord, and a note as a number |
 | `set_effects(...)` | The echo, reverb and chorus every synth shares |
-| `set_tempo(bpm)`, `beats(n)`, `beat()`, `sound_time()` | The beat, and the sound clock |
+| `set_tempo(bpm)`, `beats(n)`, `beat()`, `length_beats(name)`, `sound_time()` | The beat, and the sound clock |
 | `set_volume(v)`, `mute_sound()`, `unmute_sound()`, `stop_sound()` | All the sound |
 | `main_synth()`, `sound_output()` | The synth `play_note` uses, and all the sound together, for dials and scopes |
 | `sound_names()`, `synth_names()`, `setting_names()` | What there is |

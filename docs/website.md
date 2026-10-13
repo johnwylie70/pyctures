@@ -87,7 +87,7 @@ const scene = mount(document.querySelector("#game"), { src: "game.py" })
 await scene.destroy()
 ```
 
-The second argument takes `src`, `files` (a list of paths), `background`, `output` and `fullPage`, as the attributes do, and settings that have no attribute: `storage`, `sound` and `midi`, below.
+The second argument takes `src`, `files` (a list of paths), `background`, `output` and `fullPage`, as the attributes do, and settings that have no attribute: `storage`, `sound`, `midi`, `microphone` and `save`, below.
 
 Set `window.PYCTURES_NO_AUTO = true` before the script loads to stop it starting every `[data-pyctures-src]` by itself, and `window.PYCTURES_PYODIDE_URL` to load Pyodide from somewhere other than its official CDN (your own copy, for example).
 
@@ -147,7 +147,34 @@ mount(el, {
 - **`read(id, scope)`** gives `{ samples, level: [left, right], notes }` for one synth, or for all the sound when there is no id, as `player.read(id, scope)` does. Without it scopes and meters stay flat.
 - **Without `send`** the page plays the sound itself, and `synths`, `wasm` and `worklet` say where its parts come from, so a page that may fetch nothing (a sandboxed frame) still has sound. They are `createPlayer`'s options. `dials`, beside `sound`, is `dials.js` in the same way: the module, a promise of it, or its address.
 - **`onMidi(listener, scope)`**, with `send`: the `midi` commands of a scene that uses MIDI are in the batches you are sent, and this is how what your player received comes back. Pass it straight to your player (`onMidi: (listener, scope) => player.onMidi(listener, scope)`); it gives back a function that stops it.
+- **`onSoundEvents(listener, scope)`**, with `send`: how what your player says back reaches the scene (the microphone is on or is not, a recording is over, a file is saved). Pass it to your player in the same way (`player.onSoundEvents`). With it a scene's `take.done` and `mic.state` work; without it they never change. `songPosition()`, also with `send`, is where your player's song is, for a scene that draws it.
 - **No `eval` is needed**, for sound or for dials. A page's policy has to allow `'wasm-unsafe-eval'` (the engine is WebAssembly) and, for the worklet from a Blob, `blob:` in `script-src`; `worklet: "file"` loads `synths-worklet.js` by its address instead.
+
+### The microphone, and saved sound
+
+A scene that calls `use_microphone()` ([Sound and music](sound.md#your-voice)) has the page ask the browser for the microphone, at that moment and not before, and you need do nothing, as long as the page may ask:
+
+- The page is served over **`https` or from `localhost`**. Anywhere else a browser gives pages no microphone.
+- A scene in an **`<iframe>`** from another origin needs `allow="microphone"` on the frame (and `allow="microphone; autoplay"` if sound should not wait for a tap inside it). A sandboxed frame with no origin of its own (`sandbox="allow-scripts"`) is refused whatever it allows: give it the microphone yourself, as below.
+- Where there is none, the scene carries on: the console says once why, `mic.state` says which, and a recording is empty.
+
+An app that has the microphone some other way, or that owns the device's audio session, gives it with `microphone`:
+
+```js
+mount(el, {
+  src: "voice.py",
+  microphone: stream,                    // a MediaStream you already have (or a promise of one, or a function that gives one)
+  // or: microphone: { open(wants) { … return true }, close() { … } }   // push the frames yourself: wants.push(frames, sampleRate)
+  // or: microphone: false                                               // there is none here: never ask
+  save(file) { keep(file.name, file.bytes) },   // { name, bytes, type: "audio/wav" } for each file save_sound() makes
+})
+```
+
+It is the `microphone` option of synths.js, and [its docs/microphone.md](https://github.com/johnwylie70/synths.js/blob/main/docs/microphone.md) is the contract: what `wants` holds, how pushed frames are played, and what the native side of an app needs (on an iPad, `NSMicrophoneUsageDescription` and a play-and-record audio session). Both may be given inside `sound` instead.
+
+**Where a file from `save_sound()` goes.** With `pyctures run` Python writes it beside the scene and the page saves nothing. In a built page, in this order: to `save(file)` if you gave it; else to `storage.writeBytes(path, bytes)` if your `storage` has it, with the scene's other files; else the browser downloads it. A sandboxed frame may not download, which is one more reason to give `save` or `storage`.
+
+With `sound.send` your own player has the microphone and saves the files: the `mic`, `record` and `save` commands are in the batches, and `onSoundEvents` above carries back what it says.
 
 ### MIDI
 

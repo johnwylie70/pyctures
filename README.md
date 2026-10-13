@@ -170,7 +170,7 @@ def draw():
     text("Click for a sound", width / 2, height / 2, "white", 28, "centre")
 ```
 
-There are ready-made game sounds, notes and tunes, and synths you shape yourself: [Sound and music](docs/sound.md). A MIDI keyboard plays a synth with `lead.play_from_midi()`, and `def on_midi_note(note, velocity, channel):` is called for every key: [MIDI](docs/sound.md#midi). With one more line a scene has dials, sliders and a piano keyboard on it, to play a synth and change it as it sounds: [Dials and a keyboard](docs/dials.md).
+There are ready-made game sounds, notes and tunes, and synths you shape yourself: [Sound and music](docs/sound.md). A MIDI keyboard plays a synth with `lead.play_from_midi()`, and `def on_midi_note(note, velocity, channel):` is called for every key: [MIDI](docs/sound.md#midi). `mic = use_microphone()` is your own voice, as a robot or a monster with `mic.voice = "robot"`, recorded with `take = record_sound(3)` and saved with `save_sound(take, "hello.wav")`: [Your voice](docs/sound.md#your-voice). Sound is new, and not yet in the Pyctures that `pip install pyctures` gives (0.2.0): it will be in the next release. With one more line a scene has dials, sliders and a piano keyboard on it, to play a synth and change it as it sounds: [Dials and a keyboard](docs/dials.md).
 
 ```python
 from pyctures import *
@@ -297,6 +297,8 @@ In [`examples/`](examples), each with a comment at the top saying what it shows.
 | `synth_panel.py` | A synth to play: dials, a scope and a piano keyboard on the screen |
 | `midi_keyboard.py` | A synth that a MIDI keyboard plays, with dials that its knobs learn |
 | `midi_lights.py` | A ball and a bell for every key of a MIDI keyboard: `on_midi_note` |
+| `voice_changer.py` | Your voice as a robot or a monster: a voice to pick, dials, a scope, record and play |
+| `sampler.py` | Record a word and play it on the keys |
 | `website/` | A web page with two scenes on it |
 
 ```bash

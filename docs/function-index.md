@@ -583,7 +583,7 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 
 | Name | What it does |
 |---|---|
-| `play_sound(name)` | A ready-made game sound: `coin`, `jump`, `laser`, `explosion` and ten more |
+| `play_sound(name)` | A ready-made game sound: `coin`, `jump`, `laser`, `shoot`, `explosion`, `hit`, `powerup`, `blip`, `click`, `zap`, `bounce`, `pop`, `win`, `lose` |
 | `play_note(note, length, volume)` | A note, or a chord |
 | `play_notes(notes, step)` | A tune; `repeat=True` goes round until `.stop()` |
 | `note(note, length)`, `chord(name, length)`, `rest(length)` | A tune a line at a time: each begins where the last ended. A length is `"quarter"`, `"eighth"`, or a number of beats |
@@ -597,7 +597,18 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `set_volume(v)`, `mute_sound()`, `unmute_sound()`, `stop_sound()` | All the sound |
 | `main_synth()`, `sound_output()` | The synth `play_note` uses, and all the sound together, for dials and scopes |
 | `sound_names()`, `synth_names()`, `setting_names()` | What there is |
-| `play_song(path)` | A song from a file (`.mod`, `.xm`): `.pause()`, `.resume()`, `.stop()` |
+| `play_song(path)` | A song from a file (`.mod`, `.xm`): `.pause()`, `.resume()`, `.stop()`, `.seek(part)`, `.volume` |
+| `song.mute(channel)`, `song.solo(channel)`, `song.loop_pattern()`, `song.replace(song)` | One channel silenced or heard alone, the pattern going round, and an edited song put in its place |
+| `song.position`, `song.channel(n).level()` | Where the song is and what a channel is doing, for drawing them (a frame late) |
+| `lead.samples()`, `lead.level()`, `lead.notes()` | What a synth is doing, for your own scope, meter and lit keys (a frame late). Also on `sound_output()` and the microphone |
+| `lead.set(cutoff=4000, glide=2)` | Change settings, gliding there over two seconds |
+| `use_microphone()` | The microphone, as a synth whose sound comes in: `.listen()`, `.mute()`, `.voice`, `.pitch`, `.ring`, `.comb`, `.gain`, `.gate`, `.state`, `.ready`, `.on_ready(fn)`. See [Your voice](sound.md#your-voice) |
+| `lead.voice = "robot"`, `voice_names()` | A voice changer on a synth, a recording or the microphone: `robot`, `chipmunk`, `monster`, `cave`, `telephone`, `alien`, `whisper`, `"none"` |
+| `lead.pitch_shift`, `lead.ring_mod`, `lead.comb`, `lead.flanger` | The voice effects, on any synth |
+| `record_sound(seconds)`, `start_recording()`, `stop_recording()` | Record the microphone into a take, given back at once: `.done`, `.seconds`, `.on_done(fn)`, `.when_done()`, `.play("E4")`, `.sound_like(mic)` |
+| `record_output(seconds)`, `lead.record(seconds)` | Record everything that is played, or one synth |
+| `save_sound(take, "hello.wav")` | A recording or a sample as a WAV file: beside the scene with `pyctures run`, a download in a built page |
+| `stop_microphone()` | Let the microphone go |
 | `lead.play_from_midi()` | A MIDI keyboard plays a synth; `channel=2` for one channel, `False` to stop. See [MIDI](sound.md#midi) |
 | `lead.learn(setting)`, `lead.map_midi(number, setting)`, `lead.unmap_midi(setting)` | A knob turns a setting: the next one moved, or one by its number |
 | `on_midi_note`, `on_midi_note_off`, `on_midi_control`, `on_midi`, `on_midi_devices` | Functions you write, called with what a MIDI device sent. `on_midi_note(played)` hands one over by another name |

@@ -169,7 +169,8 @@ const last = scene.sound.take()
 - Each `step()` makes the sound up to the frame's time first, then asks Python for the frame with `dt` of exactly 1/fps, and is finished when the frame has been drawn, so the canvas can be copied at once.
 - The sound is made by a player with no sound card (synths.js's [stepped player](https://github.com/johnwylie70/synths.js/blob/main/docs/commands.md)): nothing is heard, no tap is needed first, and n frames are `round(n × 48000 / fps)` samples, the first of them the first frame's. A note the scene plays in a frame begins on that frame's first sample.
 - In Python the scene's time is the recorder's: `sound_time()`, `beat()` and `sleep()` go by it (each frame says its time as `vt`, which the runtime keeps in `S.vt`), so a scene needs no change to be recorded.
-- An app that draws the frames itself and uses only the page's sound keeper tells it the same things: `sound.stepped({ fps })` before the scene's first sound, `await sound.stepTo(seconds)` before each frame's commands are passed on, and `sound.take()`.
+- None of this is in a page that is not recorded: it is one more file, `stepped/stepped.js` beside `pyctures.js`, fetched only by `mount(el, { stepped })`. A scene built as a single `.html` file cannot be stepped.
+- An app that draws the frames itself and uses only the page's sound keeper gives the keeper two things in its `sound` option: `clock()`, the recorder's time in seconds, and `player(synths)`, which makes the scene's own player (`synths.createPlayer({ stepped: { fps } })`). It then moves that player before each frame's commands are passed on (`await player.stepped.advance(seconds)`) and takes the samples (`player.stepped.take()`).
 
 ### The microphone, and saved sound
 

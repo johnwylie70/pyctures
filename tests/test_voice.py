@@ -431,7 +431,7 @@ def test_the_voice_changer_records_and_plays_back(browser, opened, pyctures_run,
     w = opened(browser, server.url, mode)
     w.wait_running()
     w.page.mouse.click(400, 500)
-    says = lambda: w.page.evaluate(CONTROLS)[0]["label"]
+    says = lambda: (w.page.evaluate(CONTROLS) or [{"label": ""}])[0]["label"]
     wait_for(w.page, lambda: says() == ("Say something" if mode == "tone" else "No microphone here (refused): the browser's console says why"), "what the scene says")
     assert [c["label"] for c in w.page.evaluate(CONTROLS)][1:7] == ["voice", "pitch", "echo", "listen", "record", "play"]
     w.click("record")
@@ -450,7 +450,7 @@ def test_the_sampler_plays_a_recorded_word_from_the_keys(browser, opened, pyctur
     w = opened(browser, server.url)
     w.wait_running()
     w.page.mouse.click(400, 250)
-    says = lambda: w.page.evaluate(CONTROLS)[0]["label"]
+    says = lambda: (w.page.evaluate(CONTROLS) or [{"label": ""}])[0]["label"]
     w.page.keyboard.down("a")          # middle C: a bell, until a word is recorded
     w.hears(lambda h: h["wave"] > 0.02 and abs(h["hz"] - 262) < 12, "a bell at middle C")
     w.page.keyboard.up("a")

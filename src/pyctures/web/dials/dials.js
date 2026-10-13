@@ -29,6 +29,8 @@
  * it can do, and all of it is optional.
  *
  *   set(name, value), get(name)     else the control reads and writes target[name]
+ *   onChange(fn)                    fn(name) is called when what describe(name) says has changed (a list of devices
+ *                                   that grew): the control asks again. It may give back a function that stops it
  *   describe(name)                  { min, max, default, unit, step, kind, choices, name }: the control
  *                                   takes its range, unit and starting value from it. kind is "float",
  *                                   "int", "bool" or "choice"; choices is a list, or names joined by |
@@ -69,7 +71,7 @@ const THEME = {
 }
 
 /** A spec's keys in one spelling: on_change is onChange, color is colour. */
-const SPELLING = { color: 'colour', on_change: 'onChange', on_press: 'onPress', on_release: 'onRelease', on_note_on: 'onNoteOn', on_note_off: 'onNoteOff', title: 'label' }
+const SPELLING = { color: 'colour', on_change: 'onChange', on_press: 'onPress', on_release: 'onRelease', on_note_on: 'onNoteOn', on_note_off: 'onNoteOff', title: 'label', show_value: 'showValue', log_from: 'logFrom', min_scale: 'minScale', max_scale: 'maxScale', on_resize: 'onResize' }
 const spelled = (spec) => {
   const out = {}
   for (const key in spec) out[SPELLING[key] || key] = spec[key]
@@ -126,6 +128,8 @@ const unitOf = (unit) => UNITS[String(unit).toLowerCase()] ?? String(unit)
 function shown(value, c) {
   if (c.format) return String(c.format(value))
   if (typeof value !== 'number') return String(value)
+  // A value the target has a name for (0 that means "auto") is shown by its name.
+  if (c.labels) for (const at in c.labels) if (Math.abs(Number(at) - value) <= Math.abs(c.max - c.min) * 1e-9) return String(c.labels[at])
   let unit = c.unit || ''
   if (unit === 'Hz' && Math.abs(value) >= 1000) return `${(value / 1000).toFixed(Math.abs(value) >= 10000 ? 1 : 2)} kHz`
   const span = Math.abs(c.max - c.min)
@@ -204,20 +208,44 @@ class Ranged extends Control {
       d = describe(spec.target, spec.param)
       if (!this.label) this.label = d.label ?? d.name ?? String(spec.param)
     }
-    this.min = spec.min ?? d.min ?? 0
-    this.max = spec.max ?? d.max ?? 1
-    this.step = spec.step ?? d.step ?? (d.kind === 'int' ? 1 : 0)
-    this.unit = unitOf(spec.unit ?? d.unit ?? '')
-    this.digits = spec.digits ?? d.digits
+    this.spec = spec
     this.format = spec.format || null
-    // A pitch is turned by ratio, not by amount: half the dial is 20 to 200 Hz, not 20 to 10,000.
-    this.log = this.min > 0 && this.max > this.min &&
-      (spec.log ?? d.log ?? (d.curve === 'log' || (this.unit === 'Hz' && this.max / this.min >= 100)))
+    this.range(d)
     const now = spec.value ?? (this.target ? readTarget(this.target, this.param) : undefined)
     this.default = spec.default ?? d.default ?? (typeof now === 'number' ? now : this.min)
     this.v = this.clean(typeof now === 'number' ? now : this.default)
     this.pos = this.toPos(this.v)
     if (spec.value != null && this.target) writeTarget(this.target, this.param, this.v)
+  }
+  /** Its range, step and unit: what the scene gave, else what the target says of the setting. */
+  range(d) {
+    const spec = this.spec
+    this.min = spec.min ?? d.min ?? 0
+    this.max = spec.max ?? d.max ?? 1
+    this.step = spec.step ?? d.step ?? (d.kind === 'int' ? 1 : 0)
+    this.unit = unitOf(spec.unit ?? d.unit ?? '')
+    this.digits = spec.digits ?? d.digits
+    // A pitch is turned by ratio, not by amount: half the dial is 20 to 200 Hz, not 20 to 10,000.
+    this.log = this.min > 0 && this.max > this.min &&
+      (spec.log ?? d.log ?? (d.curve === 'log' || (this.unit === 'Hz' && this.max / this.min >= 100)))
+    // Turned by ratio from 0: 0 is the bottom of the dial, and just above it the dial starts at `logFrom`
+    // (the smallest value worth turning to: a thousandth of the top, unless said) and goes on by ratio.
+    this.from = 0
+    if (this.min === 0 && this.max > 0 && (spec.log ?? d.log ?? d.curve === 'log')) {
+      this.log = true
+      this.from = spec.logFrom ?? d.logFrom ?? d.log_from ?? this.max / 1000
+    }
+    this.labels = spec.labels ?? d.labels ?? null
+    if (typeof d.format === 'function' && !this.format) this.format = d.format
+  }
+  /** The target says the setting is not what it was (another range, another unit): it is asked again. */
+  refresh() {
+    const d = describe(this.target, this.param)
+    this.range(d)
+    this.default = this.spec.default ?? d.default ?? this.default
+    const now = readTarget(this.target, this.param)
+    this.v = this.clean(typeof now === 'number' ? now : this.v)
+    this.pos = this.toPos(this.v)
   }
   clean(value) {
     value = clamp(Number(value) || 0, Math.min(this.min, this.max), Math.max(this.min, this.max))
@@ -226,9 +254,12 @@ class Ranged extends Control {
   }
   toPos(value) {
     if (this.max === this.min) return 0
+    if (this.from) return value < this.from ? (value <= 0 ? 0 : ZERO_PART * value / this.from) : ZERO_PART + (1 - ZERO_PART) * Math.log(value / this.from) / Math.log(this.max / this.from)
     return this.log ? Math.log(value / this.min) / Math.log(this.max / this.min) : (value - this.min) / (this.max - this.min)
   }
   fromPos(pos) {
+    // The first little part of the turn is 0 itself, so that 0 is easy to find and to stay on.
+    if (this.from) return pos < ZERO_PART ? 0 : this.from * Math.pow(this.max / this.from, (pos - ZERO_PART) / (1 - ZERO_PART))
     return this.log ? this.min * Math.pow(this.max / this.min, pos) : this.min + (this.max - this.min) * pos
   }
   get value() { return this.v }
@@ -270,6 +301,9 @@ class Ranged extends Control {
     this.touch()
   }
 }
+
+/** Of a dial turned by ratio from 0, this much of the turn at the bottom is 0 itself. */
+const ZERO_PART = 0.04
 
 /** A size given as a number, or by name. */
 const sized = (size, small, usual, large) => (typeof size === 'number' ? (size <= SIZE_TIMES ? usual * size : size) : size === 'small' ? small : size === 'large' ? large : usual)
@@ -500,6 +534,21 @@ class Select extends Control {
     this.i = Math.max(0, this.out && typeof now === 'number' ? clamp(Math.round(now), 0, this.choices.length - 1) : this.choices.indexOf(now))
     this.default = this.i
   }
+  /**
+   * The target says its choices are not what they were (a device was plugged in, or taken out): they are
+   * asked for again. The choice it is on is kept if it is still one of them; if not, it is whatever the
+   * target says it is on now.
+   */
+  refresh() {
+    const d = describe(this.target, this.param), was = this.value
+    if (d.choices) this.choices = [...d.choices]
+    let i = this.choices.indexOf(was)
+    if (i < 0) {
+      const there = readTarget(this.target, this.param)
+      i = this.out && typeof there === 'number' ? clamp(Math.round(there), 0, this.choices.length - 1) : this.choices.indexOf(there)
+    }
+    this.i = Math.max(0, i)
+  }
   get value() { return this.choices[this.i] }
   set value(choice) { this.index = this.choices.indexOf(choice) }
   get index() { return this.i }
@@ -561,6 +610,10 @@ const TAP_REACH = 6
  * next, then clicks over), or tap a notch or a name to go straight there. Two taps put it back.
  */
 class Rotary extends Select {
+  constructor(panel, kind, spec) {
+    super(panel, kind, spec)
+    this.showValue = spec.showValue
+  }
   scaleOf() { return 1 }
   stretch() { return [0.9, 1] }
   get knob() { return sized(this.size, 36, 48, 64) }
@@ -576,15 +629,18 @@ class Rotary extends Select {
       for (const choice of this.choices) this.side = Math.max(this.side, g.measureText(String(choice)).width)
       this.side = Math.min(this.side, this.nameRoom * u) + 8 * u
     }
-    return [Math.max(76 * u, across + 26 * u + 2 * this.side), across + 50 * u + (this.named ? 22 * u : 0)]
+    // With the names round it, the one it is on is lit there: it is not written again underneath, unless asked for.
+    return [Math.max(76 * u, across + 26 * u + 2 * this.side), across + (this.named ? (this.reads ? 78 : 66) : 50) * u]
   }
   /** Where notch i is round the knob: an angle, from lower left round the top to lower right. */
   angle(i) {
     const n = this.choices.length
     return TAU * 0.375 + TAU * 0.75 * (n > 1 ? i / (n - 1) : 0.5)
   }
-  /** The middle of the knob: a little lower when names are written round it, to leave room for the one at the top. */
-  centre(u) { return [this.x + this.w / 2, this.y + (this.named ? 26 : 20) * u + (this.h - (this.named ? 46 : 40) * u) / 2] }
+  /** The middle of the knob: where a dial's is in a box as tall, so that a rotary and the dials beside it are on one line. */
+  centre(u) { return [this.x + this.w / 2, this.y + 20 * u + (this.h - 40 * u) / 2] }
+  /** Is the choice written under the knob? Where no names are round it, unless told not to (`showValue: false`); where they are, only if asked (`showValue: true`). */
+  get reads() { return this.showValue ?? !this.named }
   go(i) {
     i = clamp(i, 0, this.choices.length - 1)
     if (i === this.i) return
@@ -646,7 +702,8 @@ class Rotary extends Select {
       // Left of the knob a name ends at its notch, right of it a name starts there, and at the top it is centred.
       const side = Math.abs(c) < 0.25 ? 'center' : c < 0 ? 'right' : 'left'
       const most = side === 'center' ? this.w - 8 * u : this.side - 6 * u
-      const text = String(this.choices[i]), tx = cx + c * (r + 8 * u), ty = cy + sn * (r + 9 * u)
+      // (The name at the top sits close to the knob, to stay clear of the title above it.)
+      const text = String(this.choices[i]), tx = cx + c * (r + 8 * u), ty = cy + sn * (r + (side === 'center' ? 7 : 9) * u)
       g.font = `${on ? '600 ' : ''}${10 * u}px ${THEME.font}`
       const wide = Math.min(most, g.measureText(text).width)
       words(g, text, tx, ty, 10 * u, on ? THEME.text : THEME.dim, side, on ? '600' : '', most)
@@ -659,7 +716,7 @@ class Rotary extends Select {
     g.moveTo(cx + Math.cos(a) * (r - 18 * u), cy + Math.sin(a) * (r - 18 * u))
     g.lineTo(cx + Math.cos(a) * (r - 9 * u), cy + Math.sin(a) * (r - 9 * u))
     g.stroke()
-    words(g, String(this.value ?? ''), cx, this.y + this.h - 11 * u, 12 * u, THEME.text, 'center', '600', this.w - 6 * u)
+    if (this.reads) words(g, String(this.value ?? ''), cx, this.y + this.h - 11 * u, 12 * u, THEME.text, 'center', '600', this.w - 6 * u)
   }
 }
 
@@ -702,6 +759,19 @@ const KEY_NOTES = { KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4, KeyF: 5, KeyT: 
 const KEY_HINTS = ['A', 'W', 'S', 'E', 'D', 'F', 'T', 'G', 'Y', 'H', 'U', 'J', 'K', 'O', 'L', 'P', ';', "'"]
 const WHITE = [0, 2, 4, 5, 7, 9, 11]
 const IS_BLACK = [0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0]
+/**
+ * THE KEYBOARD IS THE INSTRUMENT: it is this tall, in points, and is the last thing to give way. Only where the
+ * plates above it could hardly be seen (a phone on its side) is it KEYS_LEAST; on a panel with height to
+ * spare it is as much as KEYS_MOST. `keyboard(lead, { height })` is kept to, whatever the room.
+ */
+const KEYS_TALL = 150
+const KEYS_LEAST = 116
+const KEYS_MOST = 190
+/** A scope made outside any group is this tall; short of room, no less than SCOPE_LEAST, which is still tall enough to read a wave. */
+const SCOPE_TALL = 104
+const SCOPE_LEAST = 56
+/** A picture shorter than this, in points, is a phone on its side: only there may the scope be put away altogether. */
+const SHORT_VIEW = 480
 /** A white key is never narrower than this, in points: with a mouse, and under a finger. Fewer octaves are shown instead. */
 const KEY_LEAST = 14
 const KEY_LEAST_FINGER = 22
@@ -769,7 +839,7 @@ class Keyboard extends Control {
   }
   natural(u, room) {
     // Short of room, it gives up some of its height before the controls above it have to be moved to be seen.
-    if (!this.box || this.at) return [this.wide ? this.wide * u : room, (this.tall || (this.at ? 150 : [150, 116, 96][this.panel.squeeze || 0])) * u]
+    if (!this.box || this.at) return [this.wide ? this.wide * u : room, (this.tall || (this.at ? KEYS_TALL : (this.panel.squeeze >= 2 ? KEYS_LEAST : KEYS_TALL) + (this.panel.keysMore || 0))) * u]
     return [this.wide ? this.wide * u : Math.min(room, 7 * 30 * (this.octaves || 2) * u), (this.tall || 130) * u]
   }
   stretch() { return this.wide || !this.box ? [1, 1] : [0.6, Infinity] }
@@ -986,7 +1056,7 @@ class Scope extends Control {
   feed(list) { this.list = list; this.fresh = true }
   natural(u, room) {
     // Made outside any group it is as wide as the picture; when there is more than fits, it gives up height first.
-    const tall = (this.tall || (this.full && this.panel.squeeze ? 64 : 104)) * u
+    const tall = (this.tall || (this.full && this.panel.squeeze ? SCOPE_LEAST : SCOPE_TALL)) * u
     if (this.wide) return [this.wide * u, tall]
     return [this.full || this.at ? room : Math.min(room, 220 * u), tall]
   }
@@ -1238,12 +1308,19 @@ const SMALLEST = 0.8
 /** On a touch screen they are drawn this much bigger, and never smaller than their size with a mouse: fingers need the room. */
 const FINGER_SCALE = 1.15
 /** Told to fit the width, controls are not drawn smaller than this by default: under a finger, and with a mouse. `minScale` says otherwise. */
+/** Told to fit the width (fit: "width"), a panel with room to spare is drawn bigger, but no bigger than this. `maxScale` says otherwise. */
+const GROWN_MOST = 1.6
 const FINGER_LEAST = 0.8
 const MOUSE_LEAST = 0.5
 /** Where the plates have to be moved to be seen, at least this much height is left to see them in, in points: the scope goes first. */
 const SEEN_LEAST = 190
 /** Lines of plates that are this part of the width already are spread to fill all of it. */
 const FILLS = 0.6
+/** Plates let go while moving faster than this, in points a millisecond, carry on; they slow to a third in this many milliseconds. */
+const FLING_LEAST = 0.15
+const FLING_FADE = 320
+/** How far a finger on a slider goes, in points, before it is clear whether it means the slider or to move the plates. */
+const MEANT_AFTER = 8
 /** A finger on one of these moves the plates under it when there is more than fits: they take no hand themselves. */
 const SLIDES = new Set(['label', 'scope', 'meter'])
 
@@ -1304,16 +1381,26 @@ class Panel {
     // What a finger holds when it moves the plates: it is given the pointer as a control is.
     this.scroller = {
       held: false, bar: false, last: 0,
-      down: (p) => { this.scroller.last = p.y; this.scroller.lastX = p.x },
+      down: (p) => { this.scroller.last = p.y; this.scroller.lastX = p.x; this.scroller.at = performance.now(); this.scroller.speed = [0, 0]; this.fling = null },
       move: (p) => {
         const v = this.viewport, by = p.y - this.scroller.last, across = p.x - this.scroller.lastX
         this.scroller.last = p.y
         this.scroller.lastX = p.x
+        // How fast the finger is going, in points a millisecond: the plates carry on at that speed when it lifts.
+        const now = performance.now(), took = Math.max(1, now - this.scroller.at), s = this.scroller.speed
+        this.scroller.at = now
+        this.scroller.speed = [s[0] * 0.4 - across / took * 0.6, s[1] * 0.4 - by / took * 0.6]
         // On the bar the thumb follows the finger; anywhere else the plates do.
         if (v) this.scrollBy(this.scroller.bar ? by * (v.h + v.max) / v.h : -by, this.scroller.bar ? 0 : -across)
       },
-      up() {}, touch() {},
+      up: () => {
+        const [vx, vy] = this.scroller.speed
+        if (!this.scroller.bar && performance.now() - this.scroller.at < 80 && Math.hypot(vx, vy) > FLING_LEAST) this.fling = { vx, vy, at: performance.now() }
+      },
+      touch() {},
     }
+    this.fling = null // the plates still moving after a finger let them go
+    this.waits = new Map() // pointer id -> a slider a finger is on, until it is clear whether the finger means the slider or the plates
 
     const listen = (target, type, fn, how) => {
       target.addEventListener(type, fn, how)
@@ -1351,7 +1438,10 @@ class Panel {
 
   close() {
     cancelAnimationFrame(this.raf)
-    for (const item of this.items) if (item.kind === 'keyboard') item.release()
+    for (const item of this.items) {
+      if (item.kind === 'keyboard') item.release()
+      if (item.unheed) { try { item.unheed() } catch (e) { /* already gone */ } item.unheed = null }
+    }
     for (const undo of this.undo.splice(0)) undo()
     this.layer.remove()
     this.items.length = 0
@@ -1382,6 +1472,8 @@ class Panel {
         Panel.edges = document.createElement('div')
         Panel.edges.style.cssText = 'position:fixed;inset:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px)'
       }
+      // A page inside another's frame is told of the screen's edges though it may be nowhere near them: it keeps none.
+      if (window.top !== window) return [0, 0, 0, 0]
       if (!Panel.edges.isConnected) document.documentElement.append(Panel.edges)
       const kept = getComputedStyle(Panel.edges), box = this.canvas.getBoundingClientRect()
       const part = (name, gone) => Math.max(0, (parseFloat(kept[name]) || 0) - Math.max(0, gone))
@@ -1403,7 +1495,29 @@ class Panel {
     const item = new Kind(this, kind, spec)
     this.items.push(item)
     this.seat(item)
+    this.heed(item)
     return item
+  }
+  /**
+   * A target that can say when a setting of its own changes shape (`onChange(fn)`: fn is called with the
+   * setting's name, or with nothing for all of them) is listened to: the control asks about its setting
+   * again (its choices, its range, its unit), is drawn again, and laid out again in case it is wider.
+   * What `onChange` gives back, if it is a function, stops the listening when the control goes.
+   */
+  heed(item) {
+    if (!item.target || item.param == null || !item.refresh) return
+    const listen = method(item.target, 'onChange', 'on_change')
+    if (!listen) return
+    let stop = null
+    const heard = (name) => {
+      if (!this.items.includes(item) || (name != null && name !== item.param)) return
+      item.refresh()
+      // A host that keeps the control elsewhere is told what it now is, as it was when it was made.
+      this.made.push(item.id, item.min ?? 0, item.max ?? 1, item.default ?? 0, (item.choices || []).join('|'), item.i ?? item.v)
+      this.arrange = true
+    }
+    try { stop = listen(heard) } catch (e) { /* a target whose onChange is something else */ }
+    item.unheed = typeof stop === 'function' ? stop : null
   }
   /** A box of one kind inside another. A row is kept with the controls too: a host counts it among them. */
   newBox(kind, spec, home) {
@@ -1486,6 +1600,7 @@ class Panel {
       const i = this.items.indexOf(item)
       if (i < 0) return
       if (item.kind === 'keyboard') item.release()
+      if (item.unheed) { try { item.unheed() } catch (e) { /* already gone */ } item.unheed = null }
       this.items.splice(i, 1)
       for (const [id, held] of this.grabs) if (held === item) this.grabs.delete(id)
       this.stale.delete(item)
@@ -1835,7 +1950,11 @@ class Panel {
     // How much wider than the room the widest line is, with everything in it as narrow as it goes.
     // (Told not to wrap, nothing is squeezed to fit: the one scale does it all, so every line is spaced alike.)
     const least = this.hold ? 'w' : 'min'
-    for (const line of lines) this.over = Math.max(this.over, line.kids.reduce((sum, kid) => sum + kid.m[least], gap * (line.kids.length - 1)) - room)
+    for (const line of lines) {
+      this.over = Math.max(this.over, line.kids.reduce((sum, kid) => sum + kid.m[least], gap * (line.kids.length - 1)) - room)
+      // And how wide the widest line is, of those that do not fill the room whatever its width (a scope's does).
+      if (!line.kids.some((kid) => kid.full || kid.m.greedy)) this.widest = Math.max(this.widest, line.w)
+    }
     for (const line of lines) line.wide = line.kids.some((kid) => kid.full || kid.m.greedy)
     this.lines += lines.length
     return {
@@ -1877,7 +1996,7 @@ class Panel {
     const k = this.k = { u, compact, pad: (compact ? 5 : 8) * u, gap: (compact ? 5 : 8) * u, title: (compact ? 18 : 22) * u }
     const margin = options.margin * u
     this.plates = []; this.titles = []; this.rules = []; this.tabs = []
-    this.viewport = null; this.viewNow = null; this.wraps = 0; this.lines = 0; this.over = 0
+    this.viewport = null; this.viewNow = null; this.wraps = 0; this.lines = 0; this.over = 0; this.widest = 0; this.spare = 0
     this.hold = options.wrap === false || (options.fit === 'width' && !set)
     this.columnsNow = this.columnsAt(W)
     for (const item of this.items) { item.hidden = false; item.view = null }
@@ -1904,7 +2023,8 @@ class Panel {
       const room = Math.max(40, R.w - 2 * k.pad)
       const [, h] = item.natural(item.u, room, g)
       item.w = room
-      item.h = Math.min(h, Math.max(70 * u, H * 0.42))
+      // No more than four tenths of the height (a phone on its side), unless the scene said how tall.
+      item.h = item.tall ? h : Math.min(h, Math.max(70 * u, H * 0.42))
       item.x = R.x + k.pad
       item.y = R.y + R.h - k.pad - item.h
       this.plates.push([R.x, item.y - k.pad, R.w, item.h + 2 * k.pad])
@@ -1937,7 +2057,7 @@ class Panel {
       if (kids.slice(0, cut).some((kid) => !isBreak(kid))) { body = kids.slice(0, cut); foot = kids.slice(cut) }
     }
     // With very little height (a phone on its side) that scope is put away, so that the controls can be seen.
-    if (this.squeeze >= 2) {
+    if (this.squeeze >= 3) {
       for (const kid of foot) if (kid.full) this.hide(kid)
       foot = foot.filter((kid) => !kid.full)
     }
@@ -1995,11 +2115,16 @@ class Panel {
       // Below the plates when everything fits; held at the bottom when the plates are moved or turned. On a scene
       // that draws nothing of its own (a panel) it is held just above the keyboard, and takes the height left over,
       // so far: there is no dead room between the scope and the keys.
-      const panel = fits && this.blank && options.at !== 'bottom' && free.b < H && below.lines.some((line) => line.wide)
+      // A scope that was made shorter to fit is given back whatever height is left, up to its own.
+      const scoped = below.lines.some((line) => line.wide)
+      const panel = fits && scoped && options.at !== 'bottom' && ((this.blank && free.b < H) || this.squeeze > 0)
       if (panel) {
-        const last = below.lines.at(-1), more = Math.max(0, Math.min(F.h - need, Math.max(last.h * 1.5, F.h * 0.22) - last.h))
+        const last = below.lines.at(-1), own = SCOPE_TALL * u + 2 * k.pad
+        const most = this.blank && free.b < H ? Math.max(own * 1.5, F.h * 0.22) : own
+        const more = Math.max(0, Math.min(F.h - need, most - last.h))
         last.h += more
         below.h += more
+        this.spare = Math.max(0, F.h - need - more)
       }
       const held = pages.length || !fits || options.at === 'bottom' || panel
       const by = held ? F.y + F.h - below.h : y
@@ -2007,6 +2132,7 @@ class Panel {
       end = held ? F.y + F.h : by + below.h + k.gap
       if (held && options.at !== 'bottom') { free.b = Math.min(free.b, by - k.gap); end = y }
     }
+    if (fits && !below.h) this.spare = Math.max(0, F.h - need)
     if (need > 0) {
       if (side) { if (options.at === 'left') free.l = F.x + F.w + k.gap; else free.r = F.x - k.gap }
       else if (options.at === 'bottom') free.b = Math.min(free.b, top - k.gap)
@@ -2098,13 +2224,15 @@ class Panel {
       }
       // Of the sizes at which all fits, the one that makes the fewest lines (a row stays a row if a little
       // smaller will keep it one), and of those the biggest. If none does, the same again with the keyboard
-      // and the scope above it less tall, and then with that scope put away. Told not to wrap, there is one
-      // size to try: the usual one, made as much smaller as the widest row needs.
+      // and the scope above it less tall. Told not to wrap, each size is first made as much smaller as the
+      // widest row needs.
       const sizes = []
-      if (!hold) for (let step = 0; usual * (1 - 0.05 * step) > least + 1e-6; step++) sizes.push(usual * (1 - 0.05 * step))
-      sizes.push(hold ? usual : least)
+      for (let step = 0; usual * (1 - 0.05 * step) > least + 1e-6; step++) sizes.push(usual * (1 - 0.05 * step))
+      sizes.push(least)
       u = 0
-      for (squeeze of [0, 1, 2]) {
+      this.keysMore = 0
+      // (The scope may be made shorter to fit, as far as SCOPE_LEAST; the keyboard is not.)
+      for (squeeze of [0, 1]) {
         this.squeeze = squeeze
         let fewest = Infinity
         for (let size of sizes) {
@@ -2115,19 +2243,38 @@ class Panel {
         if (u) break
       }
       if (!u) {
-        // Nothing fits: the plates will be moved to be seen. The scope stays if that leaves room to see a plate and a half.
+        // NOTHING FITS: THE PLATES ARE MOVED TO BE SEEN, under a scope and a keyboard that stay where they are.
+        // The scope is at its least height. Only if that leaves hardly any room to see the plates in does the
+        // keyboard give up some of its height; and only on a picture as short as a phone on its side is the
+        // scope then put away, which is said once.
         this.squeeze = squeeze = 1
         u = hold ? narrowed(usual, true) : Math.max(least, usual * 0.9)
         this.compose(u, 0)
-        if (this.seen < SEEN_LEAST) squeeze = 2
+        if (this.seen < SEEN_LEAST) { this.squeeze = squeeze = 2; this.compose(u, 0) }
+        if (this.seen < SEEN_LEAST && this.H < SHORT_VIEW && this.items.some((item) => item.full && item.kind === 'scope')) {
+          squeeze = 3
+          if (!this.saidAway) { this.saidAway = true; console.info('dials: there is too little height here for the scope, so it is put away to leave room for the controls') }
+        }
       }
       this.squeeze = squeeze
       // A group told not to wrap, in a panel that otherwise may: the same one scale, found the same way.
       u = narrowed(u, !this.compose(u, 0).fits)
+      // fit: "width" fills the width whichever way: with room to spare the panel is drawn bigger, as far as
+      // `maxScale` and no further than still fits the height.
+      if (options.fit === 'width' && !set && this.compose(u, 0).fits && this.widest > 0 && this.widest < this.roomWide - 1) {
+        const most = Math.min(options.maxScale ?? GROWN_MOST, u * this.roomWide / this.widest * 0.998)
+        for (const part of [1, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125]) {
+          const bigger = u + (most - u) * part
+          if (bigger > u + 1e-3 && this.compose(bigger, 0).fits && this.over <= 0.5) { u = bigger; break }
+        }
+      }
     }
     this.scale = u
     this.squeeze = squeeze || 0
-    if (!this.compose(u, 0).fits) this.compose(u, (this.coarse ? 18 : 12) * u)
+    if (!this.compose(u, 0).fits) { this.compose(u, (this.coarse ? 18 : 12) * u); return }
+    // Height still to spare on a panel, after the scope has had its part: the keyboard has it, up to KEYS_MOST.
+    if (!quick) this.keysMore = this.blank && this.spare > u ? Math.min(KEYS_MOST - KEYS_TALL, this.spare / u) : 0
+    if (this.keysMore) this.compose(u, 0)
   }
   /** What the layout came to: the picture's width and height, the scale the controls are drawn at, and how many plates to a line were asked for. */
   info() {
@@ -2181,6 +2328,16 @@ class Panel {
     }
     this.frames++
     for (const item of this.items) if (item.frame) item.frame(now)
+    if (this.fling) {
+      // Let go while moving, the plates carry on and slow down, and stop at either end.
+      const f = this.fling, took = Math.min(50, performance.now() - f.at), v = this.viewport
+      f.at = performance.now()
+      const was = v ? [v.scroll, v.scrollX] : null
+      if (v) this.scrollBy(f.vy * took, f.vx * took)
+      const fade = Math.pow(1 / 3, took / FLING_FADE)
+      f.vx *= fade; f.vy *= fade
+      if (!v || Math.hypot(f.vx, f.vy) < 0.02 || (was[0] === v.scroll && was[1] === v.scrollX)) this.fling = null
+    }
     const { g, ratio } = this
     if (this.arrange || this.shift) {
       const quick = !this.arrange
@@ -2297,6 +2454,13 @@ class Panel {
     }
     if (v.scroll > 0.5) shade(v.y, v.y + 16 * u)
     if (v.scroll < v.max - 0.5) shade(v.y + v.h, v.y + v.h - 16 * u)
+    if (v.maxX > 0.5) {
+      // Moved from side to side: a thin bar along the bottom says how far across they are.
+      const wide = v.w - v.gutter, long = Math.max(28 * u, wide * wide / (wide + v.maxX))
+      rounded(g, v.x + (wide - long) * v.scrollX / v.maxX, v.y + v.h - 5 * u, long, 3 * u, 1.5 * u)
+      g.fillStyle = THEME.track
+      g.fill()
+    }
     if (v.max <= 0.5) return
     const bar = this.bar()
     rounded(g, bar.x, v.y, bar.w, v.h, bar.w / 2)
@@ -2359,7 +2523,8 @@ class Panel {
   /** Is anything of the controls at this point: a control, a tab, or the bar beside plates that can be moved? */
   covers(x, y) {
     const v = this.viewport
-    return !!this.under(x, y) || !!this.tabAt(x, y) || (!!v && x >= v.right && x < v.right + v.gutter && y >= v.y && y < v.y + v.h)
+    // Where the plates can be moved, the whole of where they are seen is the controls': a finger there moves them.
+    return !!this.under(x, y) || !!this.tabAt(x, y) || (!!v && x >= v.x && x < v.x + v.w && y >= v.y && y < v.y + v.h)
   }
   pointerDown(e) {
     if (e.pointerType === 'mouse' && e.button !== 0) return
@@ -2390,15 +2555,41 @@ class Panel {
       item.reset()
       return
     }
+    // A slider that lies across the way the plates move: the finger may mean either. It is the slider's if it
+    // goes along the slider, and the plates' if it clearly goes the way they move.
+    if (item.kind === 'slider' && item.view && v && (item.vertical ? v.maxX > 0.5 : v.max > 0.5) && !this.scroller.held) {
+      this.waits.set(e.pointerId, { item, from: p })
+      return
+    }
     this.grabs.set(e.pointerId, item)
     item.held = true
     item.down(p)
   }
   pointerMove(e) {
+    const wait = this.waits.get(e.pointerId)
+    if (wait) {
+      const p = this.point(e), dx = Math.abs(p.x - wait.from.x), dy = Math.abs(p.y - wait.from.y)
+      if (Math.max(dx, dy) < MEANT_AFTER * this.u) return
+      this.waits.delete(e.pointerId)
+      const along = wait.item.vertical ? dy : dx, cross = wait.item.vertical ? dx : dy
+      const item = cross > along * 1.5 ? this.scroller : wait.item
+      if (item === this.scroller) item.bar = false
+      this.grabs.set(e.pointerId, item)
+      item.held = true
+      item.down(wait.from)
+    }
     const item = this.grabs.get(e.pointerId)
     if (item) item.move(this.point(e))
   }
   pointerUp(e) {
+    const wait = this.waits.get(e.pointerId)
+    if (wait) {
+      // It never went anywhere: a tap on the slider, which brings its handle there.
+      this.waits.delete(e.pointerId)
+      wait.item.down(wait.from)
+      wait.item.up(this.point(e))
+      return
+    }
     const item = this.grabs.get(e.pointerId)
     if (!item) return
     this.grabs.delete(e.pointerId)

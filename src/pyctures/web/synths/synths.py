@@ -962,6 +962,9 @@ class _Sound:
         self.readings = {}       # synth id ("" for all the sound) -> what it was doing when the page last said
         self.watched = {}        # what the page was asked to watch -> when it was last asked
         self.position = dict(_NO_SONG)
+        # THE SETTINGS EVERY SYNTH SHARES (the echo's time, the reverb's type): there is one echo and one reverb,
+        # so one value of each, whoever set it. Kept here by engine id, and what every synth and sound_output() read.
+        self.for_all = {}
 
     @property
     def midi(self):
@@ -1008,6 +1011,14 @@ class _Sound:
 
     def command(self, c):
         self.transport.add(c, self.clock)
+
+    def share(self, patch, names=None):
+        """What a patch says of the settings every synth shares is what they are, for everyone: of the settings
+        named, or with no names of every one it has."""
+        ids = patch if names is None else [(_setting(n) or {}).get("id", -1) for n in names]
+        for pid in ids:
+            if pid >= 200 and pid in patch:
+                self.for_all[pid] = patch[pid]
 
     def hear_back(self):
         """Make sure this program is handed what the player says back. Asked once, the first time something needs it."""
@@ -1357,7 +1368,8 @@ class Synth:
         entry = _setting(self._name(name))
         if entry is None:
             raise AttributeError("A synth has no setting called %s.%s" % (_shown(name), _meant(name, _SHOWN)))
-        value = self._patch.get(entry["id"], entry["default"])
+        shared = entry["id"] >= 200 and self._sound is not None
+        value = (self._sound.for_all if shared else self._patch).get(entry["id"], entry["default"])
         if entry["kind"] == "choice":
             return entry["choices"][int(value)]
         if entry["kind"] == "bool":
@@ -1552,6 +1564,7 @@ class Synth:
         if not given:
             return self
         _patch_of(given, "set", True, self._patch)
+        s.share(self._patch, given)
         c = {"op": "set", "id": self._id, "set": _sendable(given), "t": t}
         if glide is None:
             glide = slide
@@ -1598,7 +1611,10 @@ class Synth:
             raise ValueError('%s is not a voice.%s The voices are: %s, and "none"' % (_shown(name), _meant(name, names), ", ".join(names)))
         if self._worn is None:
             object.__setattr__(self, "_worn", {"voice": "none", "under": None})
+        # A voice may change what every synth shares (the cave's reverb), and takes it back when it is taken off.
+        self._patch.update(self._sound.for_all)
         _wear_voice(self._worn, self._patch, voice)
+        self._sound.share(self._patch)
         if send:
             self._sound.command({"op": "set", "id": self._id, "voice": voice, "t": self._sound.clock() if at is None else at})
 
@@ -1673,6 +1689,7 @@ class Synth:
                 self._wear(value, send=False)
             else:
                 _patch_of({self._name(name): value}, "set", False, self._patch)
+                self._sound.share(self._patch, [self._name(name)])
         except (ValueError, TypeError):
             pass
 
@@ -1754,6 +1771,7 @@ def _make_synth(s, preset, settings):
     note, loop = (settings.pop("note", None), settings.pop("loop", None)) if file else (None, None)
     settings = _with_samples(s, settings, patch, said, note, loop)
     _patch_of(settings, said, True, patch)
+    s.share(patch, settings)
     id = s.id("s")
     c = {"op": "synth", "id": id, "t": s.clock()}
     if preset:
@@ -1807,6 +1825,7 @@ def load_sample(path=None, note=None, loop=None, **settings):
     patch = _patch_of(_NAMES["plain"], said, False)
     _patch_of(_NAMES["synths"].get("sample"), said, False, patch)
     _patch_of(settings, said, True, patch)
+    s.share(patch, settings)
     patch[_setting("sample")["id"]] = 0
     sid = _sample_file(s, path, note, loop)
     id = s.id("s")
@@ -1951,15 +1970,34 @@ class _Output:
         return Synth.describe(self, name) if entry is not None and entry["scope"] == "all" else None
 
     def get(self, name):
+        if _key(name) == "volume":
+            return self._values["volume"]
         entry = _setting(name)
-        return self._values.get(_key(name), entry["default"] if entry else None)
+        if entry is None or entry["scope"] != "all":
+            return None
+        value = self._sound.for_all.get(entry["id"], entry["default"])
+        if entry["kind"] == "choice":
+            return entry["choices"][int(value)]
+        if entry["kind"] == "bool":
+            return value == 1
+        return value / entry["scale"]
 
     def set(self, name, value):
         if _key(name) == "volume":
             set_volume(value)
+            self._values["volume"] = value
         else:
             set_effects({name: value})
-        self._values[_key(name)] = value
+
+    def _told(self, name, value):
+        """A control in the page changed it by hand: remember it."""
+        if _key(name) == "volume":
+            self._values["volume"] = value
+        else:
+            try:
+                self._sound.share(_patch_of({name: value}, "set", False))
+            except (ValueError, TypeError):
+                pass
 
     def samples(self):
         """The wave of everything that is sounding, numbers from -1 to 1. A frame late in a Pyctures scene."""
@@ -2129,6 +2167,7 @@ def set_effects(settings=None, **more):
         raise ValueError("set_effects is for the effects every synth shares: %s. A synth's own settings are set on "
                          "the synth, as in lead.echo = 0.4" % ", ".join(shared))
     s = _sound()
+    s.share(patch)
     s.command({"op": "master", "set": given, "t": s.clock()})
 
 
@@ -2378,6 +2417,7 @@ def use_microphone(voice=None, *, listen=None, raw=None, **settings):
         mic = Mic(s, s.id("m"))
         gate = _NAMES.get("microphone", {}).get("gate", -50)
         _patch_of({"micGate": gate}, "use_microphone", False, mic._patch)
+        s.share(mic._patch, ["micGate"])
         c = {"op": "mic", "id": mic._id, "set": {"micGate": gate}, "t": s.clock()}
         if raw is False:
             c["raw"] = False
@@ -2729,7 +2769,7 @@ class _Midi:
                 for fn in list(self.on["devices"]):
                     _call(fn, self.devices_now())
                 for port in list(self.ports.values()):
-                    port._changed("device")
+                    port._devices_changed()
             elif kind == "set":
                 # A knob turned a setting on the page: the synth here is told, so that reading it back gives what it is.
                 b = self.bound.get(m.get("id"), {}).get(_key(m.get("setting")))
@@ -3045,6 +3085,7 @@ class MidiPort:
     def __init__(self, midi, which, synth):
         self._midi, self._which, self._synth = midi, which, synth
         self._device, self._channel, self._heard = None, None, []
+        self._told = None        # the name the page was last told, which is None while the chosen device is away
         self.names = list(_NAMES["midi"].get("choices", {}).get("settings", ("device", "channel")))
 
     def _words(self):
@@ -3068,7 +3109,7 @@ class MidiPort:
             return none
         if self._device in known:
             return self._device
-        return every if self._which == "input" else known[0]
+        return every if self._which == "input" else known[0]       # (a chosen device that is away reads as what is used meanwhile)
 
     def describe(self, setting):
         every, none, unavailable = self._words()
@@ -3097,7 +3138,10 @@ class MidiPort:
             if value is not None and not isinstance(value, str):
                 raise ValueError("midi_%s: device needs the name of a MIDI device, not %s" % (self._which, _shown(value)))
             self._device = None if value in (None, every, none, unavailable) else value
-            c["name"] = self._device
+            known, available = self._devices()
+            # The page is told a name only while that device is there (or before it has said what is there).
+            self._told = self._device if self._device in known or available is None else None
+            c["name"] = self._told
         else:
             raise ValueError('midi_%s has "device" and "channel", and no %s' % (self._which, _shown(setting)))
         if self._synth is not None:
@@ -3113,12 +3157,28 @@ class MidiPort:
         return lambda: self._heard.remove(fn) if fn in self._heard else None
 
     def _chosen(self, name):
-        self._device = name
+        self._device = self._told = name
         self._changed("device")
 
     def _changed(self, name):
         for fn in list(self._heard):
             _call(fn, name)
+
+    def _devices_changed(self):
+        """The devices came or went. A chosen device that is pulled out falls back, which is said once, and is
+        chosen again when it returns: falling back is the sender's work (synths.js's docs/midi.md)."""
+        known, available = self._devices()
+        want = self._device if self._device in known else None
+        if want != self._told:
+            if want is None:
+                _tell("the MIDI %s %s is not there any more, so %s is used. It will be chosen again if it comes back."
+                      % (self._which, _shown(self._device), "every input" if self._which == "input" else "the first output"))
+            self._told = want
+            c = {"do": self._which, "name": want}
+            if self._synth is not None:
+                c["id"] = self._synth._id
+            self._midi.command(c)
+        self._changed("device")
 
     device = property(lambda self: self.get("device"), lambda self, value: self.set("device", value))
     channel = property(lambda self: self._channel or (self._words()[0] if self._which == "input" else 1),
@@ -3127,12 +3187,18 @@ class MidiPort:
     def level(self):
         """How hard the last note was hit, fading away: from 0 to 1, for a meter that is an activity light. It
         follows the notes Python has been handed, so only while the program listens (on_midi_note, on_midi)."""
+        if self._which != "input":
+            return 0
+        self._midi.listen()
         hit, when = self._midi.last
-        return max(0.0, hit * (1 - (self._midi.sound.clock() - when) / 0.4)) if self._which == "input" else 0
+        return hit * 0.5 ** ((self._midi.sound.clock() - when) / 0.09)       # halving every 90 ms
 
     def notes(self):
         """The keys held down now, as numbers, from the notes Python has been handed."""
-        return sorted(self._midi.held) if self._which == "input" else []
+        if self._which != "input":
+            return []
+        self._midi.listen()
+        return sorted(self._midi.held)
 
 
 def _midi_port(which, synth):

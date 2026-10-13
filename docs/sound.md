@@ -150,7 +150,7 @@ The settings you will use most:
 | `echo`, `reverb`, `chorus` | How much of the synth goes to each effect (0 to 1) |
 | `distortion`, `crush` | Grit, and the bits each sample keeps (4 is an old games console) |
 
-`setting_names()` lists every one. The echo, the reverb and the chorus are shared by all synths, and are shaped with `set_effects(echo_time=0.3, echo_feedback=0.5, reverb_size=0.8)`.
+`setting_names()` lists every one. The echo, the reverb and the chorus are shared by all synths, and are shaped with `set_effects(echo_time=0.3, echo_feedback=0.5, reverb_size=0.8)`. The reverb is one room that every synth sends into: `set_effects(reverb_type="hall")` chooses what kind of space it is (`"room"`, `"hall"`, `"plate"`, `"cathedral"` or `"spring"`), and `reverb_decay=3` how many seconds it rings. A shared setting has one value whoever set it: `lead.reverb_type = "hall"` is the same thing, and every synth reads it back.
 
 ## Samples
 

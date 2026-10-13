@@ -25,6 +25,7 @@
  *   setTempo(120), beats(2)                beats(2) is how many seconds two beats last
  *   lead.playFromMidi()                    a MIDI keyboard plays a synth; onMidiNote, onMidiControl, sendMidiNote("C4"),
  *   lead.learn("cutoff")                   lead.sendToMidi(), midiDevices(): MIDI, which is in synths-midi.js
+ *   midiInput(), lead.midiInput()          the MIDI device and channel listened to, for a select on the screen: "device", "channel"
  *   const mic = useMicrophone()            the microphone (the browser asks first); nothing is heard until mic.listen()
  *   mic.voice = "robot"                    a voice changer: robot, chipmunk, monster, cave, telephone, alien, whisper, "none"
  *   mic.pitch = 7, mic.echo = 0.4          and the settings a synth has; a synth has them too: lead.pitchShift, ringMod, comb
@@ -356,6 +357,13 @@ function describeSetting(entry, now) {
   const value = (now === undefined ? entry.def : now) / entry.scale
   return { name: entry.name, kind: KINDS[entry.kind], min: entry.min / entry.scale, max: entry.max / entry.scale, default: entry.kind === 'c' ? entry.choices[value] : entry.kind === 'b' ? value === 1 : value,
     unit: entry.scale === 12 ? 'octaves' : entry.unit, ...(entry.choices ? { choices: [...entry.choices] } : {}) }
+}
+/** Which setting holds the sample of the oscillator whose wave this is, or null for a setting that is not an oscillator's wave. */
+const sampleOfWave = (entry) => (entry.name === 'osc1.wave' || entry.name === 'osc2.wave' ? setting(entry.name.replace('wave', 'sample')) : null)
+/** A wave described for a synth that has no sample to play: "sample" is not one of its choices. */
+function withoutSample(d) {
+  const choices = d.choices.filter((c) => c !== 'sample')
+  return { ...d, choices, max: choices.length - 1 }
 }
 /** A setting's value as a person reads it: a choice by name, a switch as true or false, a number in the friendly name's units. */
 function readSetting(entry, now) {
@@ -1943,7 +1951,13 @@ function makeTarget(id, run, conductor, read, scope) {
     id,
     set(name, value) { run({ op: 'set', id, set: Object.fromEntries(Object.entries(typeof name === 'string' ? { [name]: value } : name).map(([k, v]) => [named(k), v])) }); return target },
     get(name) { const now = conductor()?.settingOf(id, named(name), scope); return now ? readSetting(now[0], now[1]) : undefined },
-    describe(name) { const now = conductor()?.settingOf(id, named(name), scope); return now ? describeSetting(now[0], now[1]) : setting(named(name)) ? describeSetting(setting(named(name))) : null },
+    describe(name) {
+      const now = conductor()?.settingOf(id, named(name), scope)
+      if (!now) return setting(named(name)) ? describeSetting(setting(named(name))) : null
+      const d = describeSetting(now[0], now[1])
+      const holds = sampleOfWave(now[0])
+      return holds && conductor().settingOf(id, holds.name, scope)[1] === undefined ? withoutSample(d) : d
+    },
     noteOn(note, velocity = 0.8) {
       const n = noteNumber(note)
       target.noteOff(n)
@@ -1979,13 +1993,15 @@ let midiFile = null
 const loadMidi = (given) => (given ? Promise.resolve(typeof given === 'string' ? hidden(given) : given) : midiFile || (midiFile = hidden(new URL('synths-midi.js', BASE).href)))
 const midiMissing = (e) => tell(`MIDI could not be loaded, so there will be none (${(e && e.message) || e}). It is in the file synths-midi.js, which belongs beside synths.js.`, 'error')
 /** MIDI's functions: createSound's, and every synth's. They are in synths-midi.js; these are the names it is asked for by. */
-const MIDI_FUNCTIONS = ['onMidi', 'onMidiNote', 'onMidiNoteOff', 'onMidiControl', 'onMidiDevices', 'useMidiHooks', 'sendMidi', 'sendMidiNote', 'sendMidiNoteOff', 'sendMidiControl', 'sendMidiBend', 'sendMidiProgram', 'sendMidiClock', 'midiDevices', 'useMidiInput', 'useMidiOutput', 'receiveMidi', 'stopMidi']
-const MIDI_SYNTH_FUNCTIONS = ['playFromMidi', 'sendToMidi', 'mapMidi', 'learn', 'unmapMidi']
+const MIDI_FUNCTIONS = ['onMidi', 'onMidiNote', 'onMidiNoteOff', 'onMidiControl', 'onMidiDevices', 'useMidiHooks', 'sendMidi', 'sendMidiNote', 'sendMidiNoteOff', 'sendMidiControl', 'sendMidiBend', 'sendMidiProgram', 'sendMidiClock', 'midiDevices', 'useMidiInput', 'useMidiOutput', 'midiInput', 'midiOutput', 'receiveMidi', 'stopMidi']
+const MIDI_SYNTH_FUNCTIONS = ['playFromMidi', 'sendToMidi', 'mapMidi', 'learn', 'unmapMidi', 'midiInput', 'midiOutput']
+/** What midiInput() and midiOutput() can be asked for by name, and the words among their choices that are not a device or a channel. */
+const MIDI_CHOICES = { settings: ['device', 'channel'], all: 'all', none: 'no devices', unavailable: 'no MIDI here' }
 /** The kinds of MIDI message, and what a `midi` command may do: for a binding in another language. */
 const MIDI = {
   types: ['noteOff', 'noteOn', 'notePressure', 'control', 'program', 'pressure', 'bend', 'sysex', 'timeCode', 'songPosition', 'songSelect', 'tuneRequest', 'clock', 'start', 'continue', 'stop', 'sensing', 'reset', 'other', 'devices', 'tempo', 'learned', 'set'],
   does: ['devices', 'listen', 'input', 'output', 'send', 'play', 'through', 'map', 'learn', 'unmap', 'clock', 'stop'],
-  functions: MIDI_FUNCTIONS, synthFunctions: MIDI_SYNTH_FUNCTIONS,
+  functions: MIDI_FUNCTIONS, synthFunctions: MIDI_SYNTH_FUNCTIONS, choices: MIDI_CHOICES,
 }
 
 /**
@@ -2884,6 +2900,7 @@ export function createSound(options = {}) {
       midiComing = loadMidi(options.midiModule).then((m) => {
         const made = m.makeMidiApi({
           command, choices, notesOf, shown, amount, length, tell, api,
+          storage: options.midiStorage,
           clock: () => midiNow ?? clock(),
           // When a kept call should happen: counted from when it was asked, not from now.
           when: (o, said) => when(o, said) - (midiNow === null || o.at !== undefined || o.beat !== undefined ? 0 : clock() - midiNow),
@@ -2917,6 +2934,53 @@ export function createSound(options = {}) {
     return back
   }
   let midiComing = null
+  /**
+   * midiInput() and midiOutput(): the device and the channel as a TARGET, which a select on the screen is tied to
+   * as a dial is tied to a synth. It is here, and not in synths-midi.js, so that it can be given at once: until
+   * that file has arrived it says there are no devices, and what is set on it waits like every other MIDI call.
+   */
+  const midiPorts = new Map()
+  function midiPort(which, synth) {
+    const key = which + (synth ? synth._id : '')
+    if (midiPorts.has(key)) return midiPorts.get(key)
+    const input = which === 'input'
+    const name = input ? 'midiInput' : 'midiOutput'
+    let real = null
+    const it = () => real || (midi ? (real = midi[name](synth)) : null)
+    const numbers = Array.from({ length: 16 }, (_, i) => String(i + 1))
+    const first = { device: MIDI_CHOICES.none, channel: input ? MIDI_CHOICES.all : '1' }
+    const port = {
+      names: [...MIDI_CHOICES.settings],
+      get: (setting) => (it() ? real.get(setting) : first[setting]),
+      set(setting, value) { midiCall('setMidiChoice', [which, synth, setting, value]); return port },
+      describe(setting) {
+        if (it()) return real.describe(setting)
+        if (!(setting in first)) return undefined
+        return { name: setting, kind: 'text', choices: setting === 'device' ? [first.device] : input ? [first.channel, ...numbers] : numbers, default: first[setting] }
+      },
+      /** midiIn.onChange((name) => { ... }): "device" or "channel" has another value, or other choices (a device was plugged in). It gives back a function that stops it. */
+      onChange(fn) {
+        if (typeof fn !== 'function') throw new Error(`${name}().onChange needs a function to call, as in onChange((name) => { ... }), not ${shown(fn)}`)
+        const heard = (...args) => { if (stopped !== true) fn(...args) }
+        let stopped = midiCall('watchMidiChoice', [which, synth, heard])
+        return () => { if (typeof stopped === 'function') stopped(); stopped = true }
+      },
+      get device() { return port.get('device') },
+      set device(value) { port.set('device', value) },
+      get channel() { return it() ? real.channel : input ? first.channel : 1 },
+      set channel(value) { port.set('channel', value) },
+    }
+    port.on_change = port.onChange
+    if (input) {
+      /** How hard the last note was hit, fading away: from 0 to 1, for a meter that is an activity light. */
+      port.level = () => (it() ? real.level() : 0)
+      /** The keys held down on this input now, as numbers. */
+      port.notes = () => (it() ? real.notes() : [])
+    }
+    midiPorts.set(key, port)
+    midiCall(name, [synth])
+    return port
+  }
 
   /** A note that is sounding: what start() gives back. */
   class Note {
@@ -3124,7 +3188,11 @@ export function createSound(options = {}) {
     describe(name) {
       if (key(name) === 'voice') return { name: 'voice', kind: 'choice', min: 0, max: Object.keys(VOICES).length, default: 'none', unit: '', choices: ['none', ...Object.keys(VOICES)] }
       const entry = setting(this._name(name))
-      return entry ? describeSetting(entry, this._patch.get(entry.id)) : null
+      if (!entry) return null
+      const d = describeSetting(entry, this._patch.get(entry.id))
+      // "sample" is a wave only for a synth that has been given a sample to play.
+      const holds = sampleOfWave(entry)
+      return holds && !this._patch.has(holds.id) ? withoutSample(d) : d
     }
     /** A setting's name as this synth says it -> the name it has everywhere. (The microphone has words of its own.) */
     _name(name) { return name }
@@ -3135,7 +3203,7 @@ export function createSound(options = {}) {
         if (key(name) === 'voice') this._wear(value, at)
         else out[this._name(name)] = value
       }
-      return out
+      return withSamples(out, this._patch, 'set')
     }
 
     /**
@@ -3243,6 +3311,11 @@ export function createSound(options = {}) {
     mapMidi(...args) { return midiCall('mapMidi', [this, ...args], this) }
     learn(...args) { return midiCall('learn', [this, ...args], this) }
     unmapMidi(...args) { return midiCall('unmapMidi', [this, ...args], this) }
+    /** lead.midiInput(): the device and the channel this synth plays from, for a select on the screen (see midiInput). lead.midiOutput(): where its notes go. */
+    midiInput() { return midiPort('input', this) }
+    midiOutput() { return midiPort('output', this) }
+    midi_input() { return this.midiInput() }
+    midi_output() { return this.midiOutput() }
     play_from_midi(...args) { return this.playFromMidi(...args) }
     send_to_midi(...args) { return this.sendToMidi(...args) }
     map_midi(...args) { return this.mapMidi(...args) }
@@ -3275,6 +3348,47 @@ export function createSound(options = {}) {
     },
   })
 
+  // A sound file as a sample: the command that loads it, and the id it goes by.
+  function sampleFile(path, o, said) {
+    const sid = prefix + 'w' + ++ids
+    const c = { op: 'sample', id: sid, name: path }
+    if (o.note !== undefined) c.note = noteNumber(o.note)
+    if (o.loop) c.loop = Array.isArray(o.loop) ? o.loop : true
+    if (options.read) {
+      Promise.resolve().then(() => options.read(path)).then((bytes) => { if (!bytes) throw new Error('it is not there'); command({ ...c, bytes }) })
+        .catch((e) => tell(`${said}: the file could not be read (${(e && e.message) || e}), so it will be silent.`))
+    } else command({ ...c, url: options.resolve ? options.resolve(path) : typeof document !== 'undefined' ? new URL(path, document.baseURI).href : path })
+    return sid
+  }
+  /**
+   * SAMPLES AMONG A SYNTH'S SETTINGS. `sample` is a sample from loadSample, a recording, or the name of a sound file
+   * (which is loaded); giving one turns that oscillator's wave to "sample" unless a wave is said too, so
+   * lead.sample = loadSample("piano.wav") is all it takes to put a recording under a synth's filter and envelope.
+   * The wave "sample" with no sample to play is not set: it is said once, and the wave stays as it was.
+   */
+  function withSamples(given, patch, said, file = {}) {
+    const out = { ...given }
+    const names = (which) => Object.keys(out).filter((n) => setting(n)?.name === which)
+    for (const [name, value] of Object.entries(given)) {
+      const entry = setting(name)
+      if (!entry || !entry.name.endsWith('.sample')) continue
+      if (typeof value === 'string' && value.trim()) out[name] = { _sample: sampleFile(value, file, said) }
+      else if (!(value && typeof value === 'object' && value._sample)) throw new Error(`${said}: sample needs a sample from loadSample, a recording, or the name of a sound file, as in lead.sample = loadSample("piano.wav"), not ${shown(value)}`)
+      const wave = entry.name.replace('sample', 'wave')
+      if (!names(wave).length) out[wave] = 'sample'
+    }
+    for (const which of ['osc1', 'osc2']) {
+      for (const name of names(which + '.wave')) {
+        if (!(out[name] === 4 || (typeof out[name] === 'string' && out[name].toLowerCase().trim() === 'sample'))) continue
+        if (patch.has(setting(which + '.sample').id) || names(which + '.sample').length) continue
+        const now = readSetting(setting(which + '.wave'), patch.get(setting(which + '.wave').id))
+        tell(`${name} = "sample" needs a sample to play, and this synth has none, so its wave stays ${shown(now)}. Give it one first: lead.sample = loadSample("piano.wav"), or makeSynth({ sample: "piano.wav" }).`)
+        delete out[name]
+      }
+    }
+    return out
+  }
+
   function makeSynth(...args) {
     const o = {}
     let preset = null
@@ -3291,14 +3405,18 @@ export function createSound(options = {}) {
     const names = Object.keys(PRESETS).filter((n) => n !== 'sample')
     if (preset !== null && !PRESETS[preset]) throw new Error(`makeSynth(${shown(preset)}): there is no synth called ${shown(preset)}.${meant(preset, names)} The synths are: ${names.join(', ')}`)
     const said = `makeSynth(${preset ? shown(preset) : ''})`
-    const patch = patchOf(o, said, true, patchOf(preset ? PRESETS[preset] : null, said, false, patchOf(PLAIN, said, false)), () => 0)
+    const under = patchOf(preset ? PRESETS[preset] : null, said, false, patchOf(PLAIN, said, false))
+    // With a sound file for its sample, `note` and `loop` are the recording's: the note it is at, and whether it goes round.
+    const file = typeof o.sample === 'string' ? { note: o.note, loop: o.loop } : null
+    const given = withSamples(file ? Object.fromEntries(Object.entries(o).filter(([k]) => k !== 'note' && k !== 'loop')) : o, under, said, file || {})
+    const patch = patchOf(given, said, true, under, () => 0)
     const id = prefix + 's' + ++ids
     const c = { op: 'synth', id, t: clock() }
     if (preset) c.preset = preset
-    if (Object.keys(o).length) c.set = sendable(o)
+    if (Object.keys(given).length) c.set = sendable(given)
     if (macro !== undefined) c.macro = macro
     command(c)
-    return asSynth(new Synth(id, patch, (preset && PRESETS[preset].note) || 60, 0.3))
+    return asSynth(new Synth(id, patch, (preset && PRESETS[preset].note) || (file && file.note !== undefined ? noteNumber(file.note) : 60), 0.3))
   }
 
   function loadSample(path, o = {}) {
@@ -3308,17 +3426,11 @@ export function createSound(options = {}) {
     delete settings.note
     delete settings.loop
     const patch = patchOf(settings, said, true, patchOf(PRESETS.sample, said, false, patchOf(PLAIN, said, false)), () => 0)
-    const sid = prefix + 'w' + ++ids
-    const c = { op: 'sample', id: sid, name: path }
-    if (o.note !== undefined) c.note = noteNumber(o.note)
-    if (o.loop) c.loop = Array.isArray(o.loop) ? o.loop : true
-    if (options.read) {
-      Promise.resolve().then(() => options.read(path)).then((bytes) => { if (!bytes) throw new Error('it is not there'); command({ ...c, bytes }) })
-        .catch((e) => tell(`${said}: the file could not be read (${(e && e.message) || e}), so it will be silent.`))
-    } else command({ ...c, url: options.resolve ? options.resolve(path) : typeof document !== 'undefined' ? new URL(path, document.baseURI).href : path })
+    const sid = sampleFile(path, o, said)
+    patch.set(setting('osc1.sample').id, 0)
     const id = prefix + 's' + ++ids
     command({ op: 'synth', id, preset: 'sample', set: { ...sendable(settings), sample: sid }, t: clock() })
-    const synth = new Synth(id, patch, c.note ?? 60, null)
+    const synth = new Synth(id, patch, o.note !== undefined ? noteNumber(o.note) : 60, null)
     synth._sample = sid
     return asSynth(synth)
   }
@@ -3519,6 +3631,7 @@ export function createSound(options = {}) {
     command(c)
     command({ op: 'synth', id: sid, preset: 'sample', set: { sample: wid }, t: clock() })
     const made = new Take(sid, patchOf(PRESETS.sample, said, false, patchOf(PLAIN, said, false)), wid)
+    made._patch.set(setting('osc1.sample').id, 0)
     if (c.loop) made._loop = c.loop
     const take = made._self = asSynth(made)
     takes.set(wid, made)
@@ -3781,6 +3894,10 @@ export function createSound(options = {}) {
     },
   }
   for (const name of MIDI_FUNCTIONS) api[name] = (...args) => midiCall(name, args, name === 'midiDevices' ? { inputs: [], outputs: [], available: null } : undefined)
+  /** The MIDI input this program hears, as something a control can be tied to: select("midi in", midiInput(), "device"), and "channel"; level() for an activity light. */
+  api.midiInput = () => midiPort('input')
+  /** The MIDI output this program sends to, the same way: select("midi out", midiOutput(), "device"), and "channel". */
+  api.midiOutput = () => midiPort('output')
   // The Python spellings.
   for (const name of Object.keys(api)) {
     const snake = name.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase())
@@ -3874,6 +3991,8 @@ export const sendMidiClock = (on) => mine().sendMidiClock(on)
 export const midiDevices = () => mine().midiDevices()
 export const useMidiInput = (name) => mine().useMidiInput(name)
 export const useMidiOutput = (name) => mine().useMidiOutput(name)
+export const midiInput = () => mine().midiInput()
+export const midiOutput = () => mine().midiOutput()
 export const receiveMidi = (events) => mine().receiveMidi(events)
 export const stopMidi = () => { if (page) page.stopMidi() }
 // The microphone, recording and saving (see createSound's useMicrophone, recordSound and saveSound).
@@ -3898,7 +4017,7 @@ export {
   onMidiDevices as on_midi_devices, useMidiHooks as use_midi_hooks, sendMidi as send_midi, sendMidiNote as send_midi_note,
   sendMidiNoteOff as send_midi_note_off, sendMidiControl as send_midi_control, sendMidiBend as send_midi_bend,
   sendMidiProgram as send_midi_program, sendMidiClock as send_midi_clock, midiDevices as midi_devices,
-  useMidiInput as use_midi_input, useMidiOutput as use_midi_output, receiveMidi as receive_midi, stopMidi as stop_midi,
+  useMidiInput as use_midi_input, useMidiOutput as use_midi_output, midiInput as midi_input, midiOutput as midi_output, receiveMidi as receive_midi, stopMidi as stop_midi,
   useMicrophone as use_microphone, stopMicrophone as stop_microphone, recordSound as record_sound, startRecording as start_recording,
   stopRecording as stop_recording, recordOutput as record_output, saveSound as save_sound, receiveSoundEvents as receive_sound_events,
   voiceNames as voice_names,

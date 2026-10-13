@@ -23,6 +23,8 @@
  *   setVolume(0.5), muteSound(), unmuteSound(), stopSound()
  *   setEffects({ echoTime: 0.3, reverbSize: 0.8 })
  *   setTempo(120), beats(2)                beats(2) is how many seconds two beats last
+ *   lead.playFromMidi()                    a MIDI keyboard plays a synth; onMidiNote, onMidiControl, sendMidiNote("C4"),
+ *   lead.learn("cutoff")                   lead.sendToMidi(), midiDevices(): MIDI, which is in synths-midi.js
  *
  * When something starts: every call that makes a sound takes { after: seconds }, { at: a time read from
  * soundTime() } or { beat: a beat number }. Every name has its Python spelling too (play_sound, make_synth).
@@ -63,7 +65,7 @@ const COMMANDS = 1
 // The engine's parameter table, written here by scripts/sync-engine.mjs from the engine itself. Do not edit by hand.
 // Each row: id, name, kind (f float, i whole number, b on or off, c a choice), least, most, default, unit, the choices.
 /* PARAMS:BEGIN */
-const ENGINE = {"abi":1,"version":"0.0.0","parts":64,"voices":64,"samples":1024,"events":["note_on","note_off","all_notes_off","param","pitch_bend","voice_pitch","voice_freq","voice_volume","voice_pan","voice_position","voice_kill","macro_tick","arp","arp_more","song"]}
+const ENGINE = {"abi":1,"version":"0.0.0","parts":64,"voices":64,"samples":1024,"events":["note_on","note_off","all_notes_off","param","pitch_bend","voice_pitch","voice_freq","voice_volume","voice_pan","voice_position","voice_kill","macro_tick","arp","arp_more","song","record"]}
 const PARAMS = [
   [0,"volume","f",0,2,1,"gain"],
   [1,"pan","f",-1,1,0,"pan"],
@@ -150,6 +152,12 @@ const PARAMS = [
   [103,"lfo2.cutoff","f",-96,96,0,"semitones"],
   [104,"lfo2.amp","f",0,1,0,""],
   [105,"lfo2.pan","f",0,1,0,""],
+  [106,"fx.pitch","f",-12,12,0,"semitones"],
+  [107,"fx.ring","f",0,1,0,""],
+  [108,"fx.ring_freq","f",1,5000,30,"hz"],
+  [109,"fx.ring_wave","c",0,1,0,"",["sine","noise"]],
+  [110,"fx.comb","f",0,1,0,""],
+  [111,"fx.comb_freq","f",50,5000,200,"hz"],
   [112,"fx.drive","f",0,1,0,""],
   [113,"fx.bits","f",1,16,16,"bits"],
   [114,"fx.downsample","i",1,64,1,""],
@@ -158,6 +166,9 @@ const PARAMS = [
   [117,"send.chorus","f",0,1,0,"gain"],
   [120,"macro.rate","f",1,1000,50,"hz"],
   [121,"macro.sync","b",0,1,0,""],
+  [122,"fx.comb_feedback","f",-0.97,0.97,0.7,""],
+  [123,"fx.comb_rate","f",0.01,10,0.3,"hz"],
+  [124,"fx.comb_depth","f",0,1,0,""],
   [200,"master.volume","f",0,2,0.35,"gain"],
   [201,"master.limiter","b",0,1,1,""],
   [202,"delay.time","f",0.001,2,0.3,"seconds"],
@@ -169,6 +180,11 @@ const PARAMS = [
   [212,"chorus.rate","f",0.05,10,0.8,"hz"],
   [213,"chorus.depth","f",0,1,0.5,""],
   [216,"voices","i",1,64,64,"voices"],
+  [217,"input.part","i",0,63,31,"part"],
+  [218,"input.gain","f",0,8,1,"gain"],
+  [219,"input.monitor","b",0,1,1,""],
+  [220,"input.gate","f",-100,0,-100,"db"],
+  [221,"input.gate_release","f",0.005,2,0.15,"seconds"],
 ]
 /* PARAMS:END */
 
@@ -1491,6 +1507,69 @@ function makeTarget(id, run, conductor, read, scope) {
   return target
 }
 
+// --- MIDI ------------------------------------------------------------------------------------
+
+/**
+ * MIDI is in a file of its own, synths-midi.js, beside this one, and is fetched the first time a MIDI function is
+ * used: a program with no MIDI in it never loads it. docs/midi.md is its contract. `midiModule` (an option of
+ * createSound and of a player) is the module itself, a promise of it or its address, for a copy of this file that
+ * has no "beside".
+ */
+let midiFile = null
+const loadMidi = (given) => (given ? Promise.resolve(typeof given === 'string' ? hidden(given) : given) : midiFile || (midiFile = hidden(new URL('synths-midi.js', BASE).href)))
+const midiMissing = (e) => tell(`MIDI could not be loaded, so there will be none (${(e && e.message) || e}). It is in the file synths-midi.js, which belongs beside synths.js.`, 'error')
+/** MIDI's functions: createSound's, and every synth's. They are in synths-midi.js; these are the names it is asked for by. */
+const MIDI_FUNCTIONS = ['onMidi', 'onMidiNote', 'onMidiNoteOff', 'onMidiControl', 'onMidiDevices', 'useMidiHooks', 'sendMidi', 'sendMidiNote', 'sendMidiNoteOff', 'sendMidiControl', 'sendMidiBend', 'sendMidiProgram', 'sendMidiClock', 'midiDevices', 'useMidiInput', 'useMidiOutput', 'receiveMidi', 'stopMidi']
+const MIDI_SYNTH_FUNCTIONS = ['playFromMidi', 'sendToMidi', 'mapMidi', 'learn', 'unmapMidi']
+/** The kinds of MIDI message, and what a `midi` command may do: for a binding in another language. */
+const MIDI = {
+  types: ['noteOff', 'noteOn', 'notePressure', 'control', 'program', 'pressure', 'bend', 'sysex', 'timeCode', 'songPosition', 'songSelect', 'tuneRequest', 'clock', 'start', 'continue', 'stop', 'sensing', 'reset', 'other', 'devices', 'tempo', 'learned', 'set'],
+  does: ['devices', 'listen', 'input', 'output', 'send', 'play', 'through', 'map', 'learn', 'unmap', 'clock', 'stop'],
+  functions: MIDI_FUNCTIONS, synthFunctions: MIDI_SYNTH_FUNCTIONS,
+}
+
+/**
+ * A PLAYER'S MIDI. The devices are where the player is, so that is where MIDI is done: the DESK (synths-midi.js)
+ * carries out the `midi` commands in the batches, and plays a synth from a keyboard with `play`, without the
+ * sender in between. It is made when the first `midi` command arrives, which is also when the browser asks its
+ * permission. What is received goes to whoever asked with onMidi(listener, scope), as lists of plain objects.
+ */
+function midiSide(options, hooks) {
+  let desk = null
+  let kept = null
+  let closed = false
+  const heard = new Map()
+  const emit = (scope, events) => { for (const listener of [...(heard.get(scope || '') || [])]) listener(events) }
+  const at = () => (hooks.now ? hooks.now() : performance.now())
+  function load() {
+    kept = []
+    return loadMidi(options.midiModule).then((m) => {
+      desk = m.makeMidiDesk({ midi: options.midi, sysex: options.midiSysex, tell, noteNumber, emit, ...hooks })
+      if (closed) desk.close()
+      else for (const [batch, when] of kept) desk.take(batch, when)
+    }).catch((e) => { kept = { push() {} }; midiMissing(e) })
+  }
+  return {
+    load,
+    take(batch) {
+      if (desk) return desk.take(batch)
+      if (!kept) {
+        if (!batch.cmds.some((c) => c && c.op === 'midi')) return
+        load()
+      }
+      // While the file is on its way everything is kept, with when it came.
+      kept.push([batch, at()])
+    },
+    onMidi(listener, scope) {
+      const name = scope || ''
+      if (!heard.has(name)) heard.set(name, new Set())
+      heard.get(name).add(listener)
+      return () => heard.get(name)?.delete(listener)
+    },
+    pump() { desk?.pump() },
+    close() { closed = true; desk?.close() },
+  }
+}
 /** Where a song is, from the engine's ten numbers: for drawing a cursor. */
 const NO_SONG = { state: 'none', order: 0, pattern: 0, row: 0, tick: 0, speed: 0, tempo: 0, rounds: 0, rows: 0, orders: 0 }
 const songPlace = (n) => (n ? { state: ['none', 'stopped', 'playing', 'paused'][n[0]] || 'none', order: n[1], pattern: n[2], row: n[3], tick: n[4], speed: n[5], tempo: n[6], rounds: n[7], rows: n[8], orders: n[9] } : NO_SONG)
@@ -1552,6 +1631,8 @@ export function createPlayer(options = {}) {
     state: 'loading', kind: null, context: null, node: null,
     ready: new Promise((yes) => { ready = yes }),
     send, unlock, close, read, songPosition,
+    /** What MIDI devices send, and what the desk has to say, for one sender: onMidi((events) => { ... }, scope). It gives back a function that stops it. */
+    onMidi: (listener, scope) => midi.onMidi(listener, scope),
     /** A synth that exists by its id, as something controls can be tied to: set, get, describe, noteOn, noteOff, samples, level, notes. */
     target: (id, scope) => makeTarget(id, (c) => send({ synths: COMMANDS, scope, cmds: [c] }), () => conductor, read, scope),
     /** Silence, with everything kept as it is: for a scene that is paused or out of view. */
@@ -1564,6 +1645,16 @@ export function createPlayer(options = {}) {
       return new Promise((yes) => { waiting.set(++asks, yes); port.postMessage({ ask: asks }) })
     },
   }
+  // A keyboard plays a synth as soon as the page can manage: a hundredth of a second ahead, not the whole latency.
+  const midi = midiSide(options, {
+    latency: () => latency,
+    play(c, scope) {
+      if (closed || player.state === 'failed') return
+      if (!live()) return send({ synths: COMMANDS, scope, cmds: [c] })
+      conductor.run(c, context.currentTime + Math.min(latency, core ? latency : 0.01), scope)
+      conductor.flush()
+    },
+  })
   const state = (s) => {
     if (player.state === s) return
     player.state = s
@@ -1629,7 +1720,9 @@ export function createPlayer(options = {}) {
   }
 
   function send(batch) {
-    if (closed || player.state === 'failed' || !batch || !Array.isArray(batch.cmds)) return
+    if (closed || !batch || !Array.isArray(batch.cmds)) return
+    midi.take(batch)
+    if (player.state === 'failed') return
     pauses(batch)
     if (!live()) {
       // Not able to play yet: everything is kept in order, with when it was asked for (see settle).
@@ -1710,6 +1803,7 @@ export function createPlayer(options = {}) {
   function close() {
     if (closed) return
     closed = true
+    midi.close()
     if (typeof removeEventListener === 'function') for (const g of GESTURES) removeEventListener(g, unlock, { capture: true })
     try { player.node?.disconnect() } catch (e) { /* already gone */ }
     if (player.node) player.node.onaudioprocess = null
@@ -1828,14 +1922,23 @@ export async function createOfflinePlayer(options = {}) {
   const core = makeCore(wasm instanceof WebAssembly.Module ? wasm : await WebAssembly.compile(wasm), sampleRate, (m) => { if (m.type === 'song') conductor.songLoaded(m, core.time / sampleRate) })
   const conductor = makeConductor((ops) => core.exec(ops), async (c) => decode(await sampleBytes(c)), sampleBytes)
   conductor.begin()
+  // MIDI for an offline player is the `midi` transport it is given: its clock is the point rendering has reached.
+  const midi = midiSide(options, {
+    now: () => core.time / sampleRate * 1000, look: Infinity, offset: -start, latency: () => 0,
+    play(c, scope) { conductor.run(c, core.time / sampleRate, scope); conductor.flush() },
+  })
+  if (options.midi) await midi.load()
   return {
+    onMidi: midi.onMidi,
     send(batch) {
       if (!batch || !Array.isArray(batch.cmds)) return
+      midi.take(batch)
       for (const c of batch.cmds) if (c) conductor.run(c, (typeof c.t === 'number' ? c.t : typeof batch.now === 'number' ? batch.now : start) - start, batch.scope)
       conductor.flush()
     },
     async render(seconds) {
       while (conductor.loading.size) await Promise.allSettled([...conductor.loading])
+      midi.pump()
       const frames = Math.max(0, Math.round(seconds * sampleRate))
       const left = new Float32Array(frames)
       const right = new Float32Array(frames)
@@ -1854,7 +1957,7 @@ export async function createOfflinePlayer(options = {}) {
       const now = part < 0 ? null : core.taps([part], 1024)[0]
       return now ? reading(now, conductor.gain()) : NOTHING
     },
-    close() { core.close() },
+    close() { midi.close(); core.close() },
   }
 }
 
@@ -1883,6 +1986,7 @@ export async function renderSound(play, options = {}) {
   const player = await createOfflinePlayer(options)
   const sound = createSound({ sound: player, clock: () => 0, resolve: options.resolve, read: options.read })
   await play(sound)
+  await sound.settled()
   sound.flush()
   // A sample read through `read` sends its command when the bytes arrive.
   await new Promise((yes) => setTimeout(yes, 0))
@@ -1940,7 +2044,7 @@ export function createSound(options = {}) {
   function flush() {
     waiting = false
     turn = null
-    if (!cmds.length || closed) return
+    if (!cmds.length || closed || midiLoading) return
     if (!transport) {
       // ONE PLAYER FOR THE PAGE. Every createSound() on a page that is not given a transport, or an AudioContext
       // of its own, shares one player (the options of the first make it), each in a scope of its own: so ten
@@ -1954,13 +2058,14 @@ export function createSound(options = {}) {
         transport = player = shared.player
       }
     }
-    const batch = { synths: COMMANDS, now: clock(), cmds }
+    for (const join of midiJoins.splice(0)) join()
+    const batch = { synths: COMMANDS, now: clock(), cmds: midiKept ? cmds.flat() : cmds }
     if (scope) batch.scope = scope
     cmds = []
     transport.send(batch)
   }
   function command(c) {
-    cmds.push(c)
+    (midiSlot || cmds).push(c)
     if (!waiting && options.batch !== 'manual') { waiting = true; queueMicrotask(flush) }
   }
   // When a call should happen, on the sender's clock.
@@ -2035,6 +2140,59 @@ export function createSound(options = {}) {
     }
     lines.set(synth._id, at + beats * 60 / tempo)
   }
+
+  // MIDI. Its functions are in synths-midi.js, fetched the first time one is used. Until it has arrived (a moment),
+  // each call is kept with the time it was made and a place among the commands, and nothing is sent; then the calls
+  // are carried out, their commands go where they were asked for, and everything is sent as written. A mistake in
+  // one of those first calls is said in the console, since its line has gone by.
+  let midi = null
+  let midiKept = null
+  let midiLoading = false
+  let midiNow = null
+  let midiSlot = null
+  const midiJoins = []
+  function midiCall(name, args, back) {
+    if (midi) return midi[name](...args)
+    if (!midiKept) {
+      if (name === 'stopMidi') return back
+      midiKept = []
+      midiLoading = true
+      midiComing = loadMidi(options.midiModule).then((m) => {
+        const made = m.makeMidiApi({
+          command, choices, notesOf, shown, amount, length, tell, api,
+          clock: () => midiNow ?? clock(),
+          // When a kept call should happen: counted from when it was asked, not from now.
+          when: (o, said) => when(o, said) - (midiNow === null || o.at !== undefined || o.beat !== undefined ? 0 : clock() - midiNow),
+          tempo: () => tempo,
+          meant: (name) => meant(String(name), namesToShow),
+          remember: (synth, name, value) => patchOf({ [name]: value }, 'MIDI', false, synth._patch, () => 0),
+          // What the player's desk says is asked for once there is a transport to ask, which is at the next batch.
+          listen(heard) {
+            let stop = null
+            const join = () => { if (stop !== false) stop = transport?.onMidi?.(heard, scope) || null }
+            if (transport) join()
+            else midiJoins.push(join)
+            return () => { if (stop) stop(); stop = false }
+          },
+        })
+        for (const [n, a, t, slot] of midiKept) {
+          midiNow = t
+          midiSlot = slot
+          try { made[n](...a) } catch (e) { tell((e && e.message) || String(e), 'error') }
+        }
+        midiNow = midiSlot = null
+        midi = made
+      }).catch((e) => { midiKept = { push() {} }; midiMissing(e) }).then(() => {
+        midiLoading = false
+        if (options.batch !== 'manual') flush()
+      })
+    }
+    const slot = []
+    cmds.push(slot)
+    midiKept.push([name, args, clock(), slot])
+    return back
+  }
+  let midiComing = null
 
   /** A note that is sounding: what start() gives back. */
   class Note {
@@ -2295,6 +2453,17 @@ export function createSound(options = {}) {
       return this
     }
 
+    // MIDI (synths-midi.js): a MIDI keyboard plays this synth, its notes go out as MIDI, and a knob turns a setting.
+    playFromMidi(...args) { return midiCall('playFromMidi', [this, ...args], this) }
+    sendToMidi(...args) { return midiCall('sendToMidi', [this, ...args], this) }
+    mapMidi(...args) { return midiCall('mapMidi', [this, ...args], this) }
+    learn(...args) { return midiCall('learn', [this, ...args], this) }
+    unmapMidi(...args) { return midiCall('unmapMidi', [this, ...args], this) }
+    play_from_midi(...args) { return this.playFromMidi(...args) }
+    send_to_midi(...args) { return this.sendToMidi(...args) }
+    map_midi(...args) { return this.mapMidi(...args) }
+    unmap_midi(...args) { return this.unmapMidi(...args) }
+
     /** Give the synth's place back. It can still be played afterwards: it takes a place again. */
     remove() { command({ op: 'free', id: this._id, t: clock() }); return this }
   }
@@ -2542,17 +2711,21 @@ export function createSound(options = {}) {
     resume() { command({ op: 'master', pause: false, t: clock() }); flush() },
     /** Send what has been asked for so far (for `batch: 'manual'`). */
     flush,
+    /** A promise of everything asked for so far being ready to send: MIDI's file, if a MIDI function was used, has arrived. */
+    settled: () => midiComing || Promise.resolve(),
     /** The player this made for itself, once a sound has been asked for (null with a `sound` transport). */
     get player() { return player },
     /** Stop everything and let go of the sound card. */
     close() {
       if (closed) return
+      midi?.close()
       cmds = [{ op: 'stop', t: clock() }, { op: 'close', t: clock() }]
       if (transport) flush()
       closed = true
       if (mine) { if (--mine.users <= 0) { mine.player.close(); if (shared === mine) shared = null } } else player?.close()
     },
   }
+  for (const name of MIDI_FUNCTIONS) api[name] = (...args) => midiCall(name, args, name === 'midiDevices' ? { inputs: [], outputs: [], available: null } : undefined)
   // The Python spellings.
   for (const name of Object.keys(api)) {
     const snake = name.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase())
@@ -2583,7 +2756,7 @@ export function describe() {
     version, commands: COMMANDS, engine: ENGINE,
     settings: PARAMS.map(([id, name, kind, min, max, def, unit, choices]) => ({ id, name, kind: KINDS[kind], min, max, default: def, unit, ...(choices ? { choices } : {}), scope: id < 200 ? 'synth' : 'all' })),
     names: Object.fromEntries(Object.entries(ALIASES).map(([alias, to]) => [alias, Array.isArray(to) ? { setting: to[0], scale: to[1] } : { setting: to, scale: 1 }])),
-    choiceWords: CHOICE_WORDS, plain: PLAIN, synths: PRESETS, sounds: SOUNDS, chords: CHORDS, orders: ORDERS, macroWaves: MACRO_WAVES, lengths: LENGTHS, lengthLetters: LENGTH_LETTERS,
+    choiceWords: CHOICE_WORDS, plain: PLAIN, synths: PRESETS, sounds: SOUNDS, chords: CHORDS, orders: ORDERS, macroWaves: MACRO_WAVES, lengths: LENGTHS, lengthLetters: LENGTH_LETTERS, midi: MIDI,
   }
 }
 
@@ -2617,6 +2790,25 @@ export const setTempo = (bpm) => mine().setTempo(bpm)
 export const beats = (n) => mine().beats(n)
 export const beat = () => mine().beat()
 export const soundTime = () => mine().soundTime()
+// MIDI: a keyboard, knobs and other synths (see synths-midi.js, and lead.playFromMidi(), lead.learn("cutoff")).
+export const onMidi = (fn) => mine().onMidi(fn)
+export const onMidiNote = (fn) => mine().onMidiNote(fn)
+export const onMidiNoteOff = (fn) => mine().onMidiNoteOff(fn)
+export const onMidiControl = (fn) => mine().onMidiControl(fn)
+export const onMidiDevices = (fn) => mine().onMidiDevices(fn)
+export const useMidiHooks = (hooks) => mine().useMidiHooks(hooks)
+export const sendMidi = (...a) => mine().sendMidi(...a)
+export const sendMidiNote = (...a) => mine().sendMidiNote(...a)
+export const sendMidiNoteOff = (...a) => mine().sendMidiNoteOff(...a)
+export const sendMidiControl = (...a) => mine().sendMidiControl(...a)
+export const sendMidiBend = (...a) => mine().sendMidiBend(...a)
+export const sendMidiProgram = (...a) => mine().sendMidiProgram(...a)
+export const sendMidiClock = (on) => mine().sendMidiClock(on)
+export const midiDevices = () => mine().midiDevices()
+export const useMidiInput = (name) => mine().useMidiInput(name)
+export const useMidiOutput = (name) => mine().useMidiOutput(name)
+export const receiveMidi = (events) => mine().receiveMidi(events)
+export const stopMidi = () => { if (page) page.stopMidi() }
 /** The page's player, once a sound has been asked for: its `state` is 'waiting' until the first tap. */
 export const soundPlayer = () => mine().player
 export {
@@ -2626,4 +2818,9 @@ export {
   soundNames as sound_names, synthNames as synth_names, settingNames as setting_names, noteNumber as note_number,
   createSound as create_sound, renderSound as render_sound, packSong as pack_song, playArp as play_arp, startArp as start_arp, mainSynth as main_synth,
   soundOutput as sound_output, chordNotes as chord_notes, startLines as start_lines, loopNotes as loop_notes, lengthBeats as length_beats,
+  onMidi as on_midi, onMidiNote as on_midi_note, onMidiNoteOff as on_midi_note_off, onMidiControl as on_midi_control,
+  onMidiDevices as on_midi_devices, useMidiHooks as use_midi_hooks, sendMidi as send_midi, sendMidiNote as send_midi_note,
+  sendMidiNoteOff as send_midi_note_off, sendMidiControl as send_midi_control, sendMidiBend as send_midi_bend,
+  sendMidiProgram as send_midi_program, sendMidiClock as send_midi_clock, midiDevices as midi_devices,
+  useMidiInput as use_midi_input, useMidiOutput as use_midi_output, receiveMidi as receive_midi, stopMidi as stop_midi,
 }

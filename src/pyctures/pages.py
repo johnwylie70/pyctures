@@ -22,6 +22,7 @@ ASSETS = {
     "synths/synths.js": WEB / "synths" / "synths.js",
     "synths/synths_core.wasm": WEB / "synths" / "synths_core.wasm",
     "synths/synths-worklet.js": WEB / "synths" / "synths-worklet.js",
+    "synths/synths-midi.js": WEB / "synths" / "synths-midi.js",     # MIDI: fetched only by a scene that uses it
     "synths/synths.py": WEB / "synths" / "synths.py",
     "synths/LICENSE": WEB / "synths" / "LICENSE",
     "dials/dials.js": WEB / "dials" / "dials.js",
@@ -117,6 +118,10 @@ def single_page(title, name, source, files=None, three=False, libraries=()):
         }
     for library in libraries:
         data[LIBRARIES[library][0]] = library_for_page(library)
+    # MIDI's own file goes in only with a scene that uses MIDI (a folder has it beside synths.js, fetched on first use).
+    texts = [source] + [v.decode("utf-8", "replace") for k, v in files.items() if k.endswith(".py")]
+    if "synths" in libraries and any(re.search(r"midi", t, re.I) for t in texts):
+        data["synths"]["midi"] = ASSETS["synths/synths-midi.js"].read_text(encoding="utf-8")
     attrs = ' data-pyctures-src="%s" data-pyctures-fullpage' % html.escape(name)
     if files:
         attrs += ' data-pyctures-files="%s"' % html.escape(",".join(files))

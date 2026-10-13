@@ -27,6 +27,7 @@ COPIES = {
     ("synths.js", "synths.js"): WEB / "synths" / "synths.js",
     ("synths.js", "synths_core.wasm"): WEB / "synths" / "synths_core.wasm",
     ("synths.js", "synths-worklet.js"): WEB / "synths" / "synths-worklet.js",
+    ("synths.js", "synths-midi.js"): WEB / "synths" / "synths-midi.js",
     ("synths.js", "LICENSE"): WEB / "synths" / "LICENSE",
     ("synths-py", "src/synths/__init__.py"): WEB / "synths" / "synths.py",
     ("dials.js", "dials.js"): WEB / "dials" / "dials.js",

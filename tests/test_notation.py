@@ -287,3 +287,102 @@ def test_a_built_page_shows_sheet_music_in_the_browsers_own_python(browser, stat
     w.page.wait_for_function(READY + " && %s.plan.hits.length === 4" % PAGE, timeout=120000)
     assert w.page.evaluate(LAYERS) == "scene,notation"
     assert not w.errors
+
+
+# ---------------------------------------------------------------- recorded a frame at a time
+
+FILM_SCENE = '''
+from pyctures import *
+from synths import *
+from pynotation import *
+
+sine = make_synth(wave="sine", filter="off", attack=0, decay=0, sustain=1, release=0, volume=1)
+page = show_notes("C4 G4 C5 - E5 A5", "eighth", tempo=150, synth=sine)
+page.play()
+
+def draw():
+    background("navy")
+'''
+
+FILM_PAGE = '''<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000">
+<div id="s" style="width:640px;height:360px"></div>
+<script>window.PYCTURES_NO_AUTO = true</script>
+<script type="module">
+import { mount } from "/pyctures/pyctures.js"
+window.film = async (fps, frames) => {
+  const scene = mount(document.getElementById("s"), { src: "tune.py", stepped: { fps }, server: true })
+  await scene.ready
+  // A recorder begins when the scene's sound is there (it has no sound card, and wants no tap).
+  while (scene.sound.state() !== "on") await new Promise((done) => setTimeout(done, 20))
+  const sheet = () => { const stage = scene.canvas[Symbol.for("notation.stage")]; return stage && stage.pages[0] }
+  const lit = [], line = [], parts = []
+  for (let f = 0; f < frames; f++) {
+    if (f) await scene.step()
+    parts.push(scene.sound.take())
+    const p = sheet()
+    lit.push(p ? [...p.sounding] : null)
+    line.push(p && p.cursor.style.display === "block" ? parseFloat(p.cursor.style.left) : null)
+  }
+  await scene.sound.stepTo(frames / fps)
+  parts.push(scene.sound.take())
+  // The samples that follow each frame's moment (parts[f + 1]), and which of the tune's pitches is in their first 8 ms.
+  const pitches = { 60: 261.63, 67: 392, 72: 523.25, 76: 659.25, 81: 880 }, rate = 48000
+  const heard = []
+  let sum = 0
+  for (let f = 0; f < frames; f++) {
+    const x = parts[f + 1] ? parts[f + 1].left : new Float32Array(0), n = Math.min(x.length, Math.round(rate * 0.008))
+    let best = null, most = 0
+    for (const [note, hz] of Object.entries(pitches)) {
+      let re = 0, im = 0
+      for (let i = 0; i < n; i++) { re += x[i] * Math.cos(2 * Math.PI * hz * i / rate); im += x[i] * Math.sin(2 * Math.PI * hz * i / rate) }
+      const power = n ? (re * re + im * im) / (n * n) : 0
+      if (power > most) { most = power; best = +note }
+    }
+    heard.push(most > 1e-3 ? best : null)
+    for (let i = 0; i < x.length; i += 7) sum = (sum * 31 + Math.round(x[i] * 1e6)) | 0
+  }
+  const player = scene.sound.player
+  return { lit, heard, line, sum, kind: player && player.kind, delay: player && player.buffer().delay, status: scene.status, errors: scene.errors }
+}
+</script>
+'''
+
+
+def test_recorded_a_frame_at_a_time_the_note_lit_in_each_frame_is_the_note_in_its_samples(browser, pyctures_run, tmp_path):
+    """Pyctures' stepped scene (mount's `stepped`, scene.step()): the tune is on a plain sine, so the note in a stretch of
+    samples can be told by its pitch. At 50 frames a second a note is 10 frames long and begins half way between two
+    frames, so no frame falls on a join. Two films of the same scene are the same."""
+    if not (pages.WEB / "stepped" / "stepped.js").exists() or "createSteppedPlayer" not in (pages.WEB / "synths" / "synths.js").read_text(encoding="utf-8"):
+        pytest.skip("this Pyctures has no stepped scene yet")
+    (tmp_path / "tune.py").write_text(FILM_SCENE)
+    (tmp_path / "film.html").write_text(FILM_PAGE)
+    p = pyctures_run(tmp_path)
+    films = []
+    for _ in range(2):
+        page = browser.new_page(viewport={"width": 700, "height": 420})
+        errors = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(p.url + "film.html")
+        page.wait_for_function("() => typeof window.film === 'function'")
+        got = page.evaluate("([fps, frames]) => window.film(fps, frames)", [50, 90])
+        assert not errors and not got["errors"] and got["status"] == "running", (errors, got["errors"])
+        films.append(got)
+        page.close()
+    one, two = films
+    # The sound is the recorder's (no sound card), and is heard with no delay: so nothing is lit late.
+    assert one["kind"] == "stepped" and one["delay"] == 0
+    frames = [{"f": f, "lit": (l[0] if l else None), "heard": one["heard"][f]} for f, l in enumerate(one["lit"])]
+    # Every frame with a note in its samples has that note lit, and a frame with nothing lit is silent. (A note is let go
+    # at 94% of its length, so in its last frame it may be lit and already silent: the only difference there is.)
+    wrong = [x for x in frames if (x["heard"] is not None and x["heard"] != x["lit"]) or (x["lit"] is None and x["heard"] is not None)]
+    assert wrong == [], wrong[:6]
+    order = [x["lit"] for i, x in enumerate(frames) if x["lit"] is not None and (i == 0 or frames[i - 1]["lit"] != x["lit"])]
+    assert order == [60, 67, 72, 76, 81]
+    assert len([x for x in frames if x["heard"] is not None]) >= 40
+    assert len([x for x in frames if x["lit"] is not None and x["heard"] is None]) <= 5
+    # The line moves on, frame by frame.
+    moved = [x for x in one["line"] if x is not None]
+    assert len(moved) >= 40 and all(b >= a for a, b in zip(moved, moved[1:])) and moved[-1] - moved[0] > 100
+    # And a second film is the same film.
+    assert one["lit"] == two["lit"] and one["line"] == two["line"] and one["sum"] == two["sum"]
+    print("a film of %d frames: %d with sound, %d where a note is lit just after it is let go; lit by frame: %s" % (len(frames), len([x for x in frames if x["heard"] is not None]), len([x for x in frames if x["lit"] is not None and x["heard"] is None]), "".join("." if x["lit"] is None else "CDEFGAB"[[0, 2, 4, 5, 7, 9, 11].index(x["lit"] % 12)] for x in frames)))

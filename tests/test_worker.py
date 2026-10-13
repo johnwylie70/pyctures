@@ -257,7 +257,7 @@ def test_single_file_2d_is_small_and_runs_from_disk_and_http(browser, static_ser
     assert page.is_file() and page.name == "star_catcher.html"
     assert list(tmp_path.iterdir()) == [page]
     text = page.read_text()
-    assert "\"three\": {\"core\"" not in text and len(text) < 200_000
+    assert "\"three\": {\"core\"" not in text and len(text) < 230_000   # (188 KB before scenes; scenes are 33 KB of the runtime, in every page)
     assert "<script type=\"module\">" in text
     for url in (page.as_uri(), static_server(tmp_path) + page.name):
         w = Watched(browser, url)

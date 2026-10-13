@@ -598,6 +598,14 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `main_synth()`, `sound_output()` | The synth `play_note` uses, and all the sound together, for dials and scopes |
 | `sound_names()`, `synth_names()`, `setting_names()` | What there is |
 | `play_song(path)` | A song from a file (`.mod`, `.xm`): `.pause()`, `.resume()`, `.stop()` |
+| `lead.play_from_midi()` | A MIDI keyboard plays a synth; `channel=2` for one channel, `False` to stop. See [MIDI](sound.md#midi) |
+| `lead.learn(setting)`, `lead.map_midi(number, setting)`, `lead.unmap_midi(setting)` | A knob turns a setting: the next one moved, or one by its number |
+| `on_midi_note`, `on_midi_note_off`, `on_midi_control`, `on_midi`, `on_midi_devices` | Functions you write, called with what a MIDI device sent. `on_midi_note(played)` hands one over by another name |
+| `send_midi_note(note, velocity, length)`, `send_midi_note_off(note)` | A note out to another device |
+| `send_midi_control(number, value)`, `send_midi_bend(bend)`, `send_midi_program(number)`, `send_midi(bytes)`, `send_midi_clock()` | A knob, the pitch wheel, a sound by number, any message, and the beat |
+| `lead.send_to_midi()` | What a synth plays also goes out as MIDI |
+| `midi_devices()`, `use_midi_input(name)`, `use_midi_output(name)` | What is plugged in, and which to use |
+| `receive_midi(message)`, `stop_midi()` | Pretend a message arrived; finish with MIDI |
 
 ## Dials and a keyboard
 

@@ -170,7 +170,7 @@ def draw():
     text("Click for a sound", width / 2, height / 2, "white", 28, "centre")
 ```
 
-There are ready-made game sounds, notes and tunes, and synths you shape yourself: [Sound and music](docs/sound.md). With one more line a scene has dials, sliders and a piano keyboard on it, to play a synth and change it as it sounds: [Dials and a keyboard](docs/dials.md).
+There are ready-made game sounds, notes and tunes, and synths you shape yourself: [Sound and music](docs/sound.md). A MIDI keyboard plays a synth with `lead.play_from_midi()`, and `def on_midi_note(note, velocity, channel):` is called for every key: [MIDI](docs/sound.md#midi). With one more line a scene has dials, sliders and a piano keyboard on it, to play a synth and change it as it sounds: [Dials and a keyboard](docs/dials.md).
 
 ```python
 from pyctures import *
@@ -295,6 +295,8 @@ In [`examples/`](examples), each with a comment at the top saying what it shows.
 | `tune.py` | Drums, a bass and a melody that go round, with lights in time |
 | `arpeggio_chords.py` | One voice playing chords, as a sound chip would |
 | `synth_panel.py` | A synth to play: dials, a scope and a piano keyboard on the screen |
+| `midi_keyboard.py` | A synth that a MIDI keyboard plays, with dials that its knobs learn |
+| `midi_lights.py` | A ball and a bell for every key of a MIDI keyboard: `on_midi_note` |
 | `website/` | A web page with two scenes on it |
 
 ```bash

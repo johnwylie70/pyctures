@@ -238,6 +238,7 @@ Define any of these and they are called when the event happens:
 | `on_touch_end(touch, cancelled)` | A finger comes up. |
 | `on_wheel(amount)` | The wheel turns. Rolling down is positive. |
 | `on_pinch(scale, change)` | Two fingers move together or apart. See [Zooming](#zooming-pinch-and-the-wheel). |
+| `on_midi_note(note, velocity, channel)`, `on_midi_control(number, value, channel)` | A key of a MIDI keyboard goes down, or a knob moves, in a scene with `from synths import *`. See [MIDI](sound.md#midi). |
 
 A function may leave out the arguments it does not need: `def on_key_down(key):` and `def on_mouse_down(x, y):` are fine.
 

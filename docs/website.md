@@ -87,7 +87,7 @@ const scene = mount(document.querySelector("#game"), { src: "game.py" })
 await scene.destroy()
 ```
 
-The second argument takes `src`, `files` (a list of paths), `background`, `output` and `fullPage`, as the attributes do, and settings that have no attribute: `storage` and `sound`, below.
+The second argument takes `src`, `files` (a list of paths), `background`, `output` and `fullPage`, as the attributes do, and settings that have no attribute: `storage`, `sound` and `midi`, below.
 
 Set `window.PYCTURES_NO_AUTO = true` before the script loads to stop it starting every `[data-pyctures-src]` by itself, and `window.PYCTURES_PYODIDE_URL` to load Pyodide from somewhere other than its official CDN (your own copy, for example).
 
@@ -146,7 +146,32 @@ mount(el, {
 - **One clock.** Every time in a batch is on the page's clock, `performance.now() / 1000`, whether the command came from Python (whose own clock may be another computer's) or from a key or a dial on the page. `now` is that clock when the batch was handed over.
 - **`read(id, scope)`** gives `{ samples, level: [left, right], notes }` for one synth, or for all the sound when there is no id, as `player.read(id, scope)` does. Without it scopes and meters stay flat.
 - **Without `send`** the page plays the sound itself, and `synths`, `wasm` and `worklet` say where its parts come from, so a page that may fetch nothing (a sandboxed frame) still has sound. They are `createPlayer`'s options. `dials`, beside `sound`, is `dials.js` in the same way: the module, a promise of it, or its address.
+- **`onMidi(listener, scope)`**, with `send`: the `midi` commands of a scene that uses MIDI are in the batches you are sent, and this is how what your player received comes back. Pass it straight to your player (`onMidi: (listener, scope) => player.onMidi(listener, scope)`); it gives back a function that stops it.
 - **No `eval` is needed**, for sound or for dials. A page's policy has to allow `'wasm-unsafe-eval'` (the engine is WebAssembly) and, for the worklet from a Blob, `blob:` in `script-src`; `worklet: "file"` loads `synths-worklet.js` by its address instead.
+
+### MIDI
+
+A scene that uses MIDI ([Sound and music](sound.md#midi)) uses the browser's Web MIDI, and you need do nothing: the page fetches `synths/synths-midi.js` the first time a scene uses MIDI, and the browser asks the person's permission then. A page inside a frame of another origin needs `allow="midi"` on the frame.
+
+Safari has no Web MIDI, and so no browser or web view on an iPhone or an iPad has. An app that reaches MIDI some other way (CoreMIDI, behind its web view) gives it to the scene with `midi`, a **MIDI transport**:
+
+```js
+mount(el, {
+  src: "keys.py",
+  midi: {
+    open() {},                           // optional, may give a promise: called once, when MIDI is first used. Throw if there is none
+    inputs() { return ["Keystation 49"] },    // the names of the devices there now
+    outputs() { return ["Minilogue"] },
+    send(bytes, time, output) {},        // one whole message; time is milliseconds on performance.now(); output is a name, or undefined for the first
+    receive(listener) {},                // keep it, and call listener(bytes, time, input) for what arrives
+    changed(listener) {},                // optional: call listener() when a device is plugged in or pulled out
+  },
+})
+```
+
+It is the `midi` option of synths.js, and [its docs/midi.md](https://github.com/johnwylie70/synths.js/blob/main/docs/midi.md) is the contract, with what the native side of an app needs. `midi: false` switches MIDI off. Everything else is done in the page: reading the bytes, the keyboard that plays a synth, the knob that turns a setting, and the timing of what is sent. The scenes of a page share one player, so the first scene to make a sound decides the transport for all of them.
+
+Python is handed what was received with the next frame, so a scene's own `on_midi_note` hears a key up to a frame late (each message carries the time it happened). A keyboard playing a synth and a knob turning a setting do not wait for Python at all.
 
 ## Try the example
 

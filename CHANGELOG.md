@@ -9,6 +9,9 @@
 - `pyctures build` takes along the sound files a scene names (`load_sample("sounds/kick.wav")`), as it does images.
 - **`sound`**, for an app that shows scenes: `mount(el, { src, sound })` takes an object with any of `send` (take the commands and play them elsewhere), `read`, `synths`, `wasm`, `worklet`, `latency` and `onState`. `dials` gives the page its `dials.js`. See `docs/website.md`.
 - Four new examples: Sound Catcher, Tune, Arpeggio Chords and Synth Panel.
+- **MIDI**, in a scene with `from synths import *`. `lead.play_from_midi()` has a MIDI keyboard play a synth, and `lead.learn("cutoff")` or `lead.map_midi(74, "cutoff")` has a knob turn a setting and the dial tied to it; the page does both itself, so they are immediate however busy Python is. A scene's own `on_midi_note(note, velocity, channel)`, `on_midi_note_off`, `on_midi_control`, `on_midi` and `on_midi_devices` are called with what arrived, once a frame, each message with the time it happened. `send_midi_note("C4", 0.8, length="quarter")` and the rest send to a device at the exact time asked for, and `midi_devices()` says what is plugged in (the page answers a frame later). Where there is no MIDI the console says so once and the scene carries on. MIDI's file is fetched only by a scene that uses it, and a single `.html` file carries it only then. See `docs/sound.md`.
+- **`midi`**, for an app that shows scenes: `mount(el, { src, midi })` takes a MIDI transport for a browser that has none (an iPad's web view), and `sound.onMidi` hands back what a host's own player received. See `docs/website.md`.
+- Two new examples: MIDI Keyboard and MIDI Lights. Each is worth running with nothing plugged in.
 - `scripts/sync_libraries.py` copies the two libraries into `src/pyctures/web/synths` and `src/pyctures/web/dials` from the repositories where they are written.
 
 ## 0.2.0 (2026-10-11)

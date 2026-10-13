@@ -2257,25 +2257,24 @@ export class Scene {
     r.reads = {}
     r.busy = true
     r.busySince = performance.now()
+    let running = false
     try {
       const text = await this.transport.tick(payload)
-      if (token !== r.token) return { frame, time, running: false }
+      if (token !== r.token) return { frame, time, running }
       r.busy = false
       if (r.warnedStuck) this.unstuck()
-      const running = this.handleReply(JSON.parse(text), token)
+      running = this.handleReply(JSON.parse(text), token)
       // A change of scene moves on by this one frame (the screen's refreshes do not move it while stepped).
       if (this.stage) this.stage.step(1 / s.fps)
-      return { frame, time, running }
     } catch (error) {
-      if (token !== r.token) return { frame, time, running: false }
-      r.busy = false
-      r.live = false
+      if (token !== r.token) return { frame, time, running }
+      r.busy = r.live = false
       const msg = String((error && error.message) || error)
       this.log('err', msg)
       this.showError(msg, 0)
       this.setStatus('error')
-      return { frame, time, running: false }
     }
+    return { frame, time, running }
   }
 
   resume() {

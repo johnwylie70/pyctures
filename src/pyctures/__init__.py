@@ -64,7 +64,7 @@ H_SAVED = 8  # the page's keeper of saved values
 H_FILES = 9  # the page's keeper of files and databases
 H_SOUND = 10     # the page's sound: `from synths import *` sends it a frame's sounds as one command, send(batch)
 H_DIALS = 11     # the page's dials, sliders and piano keys: `from pydials import *` makes each with one command
-H_EFFECTS = 13   # the page's effects: the library pyvisualfx
+H_EFFECTS = 13   # pyvisualfx
 H_NOTATION = 15  # the page's sheet music: `from pynotation import *`
 
 
@@ -94,7 +94,7 @@ class _State:
         self.databases = []      # every database that is open
         self.ending = []         # functions called as a frame is sent (a library that sends once a frame, as synths does)
         self.vt = None           # the scene's time while a recorder steps it (each frame says it), else None
-        self.dt = None           # this frame's seconds, for a library; None when what is sent is not a frame
+        self.dt = None           # this frame's seconds, or None
         self.scenes = None       # what the library pyscenes keeps for this run, for a file that names a scene
         self.stage = None        # its director, once the file has defined a scene: each frame tests this and no more
 

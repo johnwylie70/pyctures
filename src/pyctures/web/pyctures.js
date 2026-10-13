@@ -771,7 +771,7 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   // SHEET MUSIC (the library pynotation).
   const sheets = notation ? notation(canvas) : null
   if (sheets) H.set(15, sheets)
-  // EFFECTS (pyvisualfx, handle 13). Python's frame(dt) ends a batch; it is run when the batch is done, since a change of scene paints its layer then.
+  // EFFECTS (pyvisualfx): frame(dt) is run when the batch is done.
   const fx = effects ? effects(canvas) : null
   if (fx) H.set(13, new Proxy({}, { has: () => true, get: (_, n) => (n === 'frame' ? (dt) => queueMicrotask(() => fx.frame(dt)) : (...a) => fx[n](...a)) }))
   window.addEventListener('keydown', sendInput)

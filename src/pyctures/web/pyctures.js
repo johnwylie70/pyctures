@@ -921,7 +921,7 @@ const NO_READING = { samples: [], level: [0, 0], notes: [] }
  * and a scene that stops closes it.
  *
  * `synth(id)` is the page's own object for one of Python's synths, with what dials.js looks for in a
- * target: set, get, describe, noteOn, noteOff, samples, level and notes. A dial or a piano key in the page
+ * target: set, get, describe, onChange, noteOn, noteOff, samples, level and notes. A dial or a piano key in the page
  * acts on it here, at once, and Python is only told afterwards. `output()` is the same for all the sound.
  *
  * `host` is the `sound` option of mount(), from an app that shows scenes; every part of it is optional:
@@ -1090,13 +1090,17 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
 
   function remember(c) {
     if (c.op === 'synth') {
+      const had = sampled(c.id)
       synths.set(c.id, { preset: c.preset || null, set: [] })
       if (c.voice != null) wear(c.id, c.voice)
       synths.get(c.id).set.push(...Object.entries(c.set || {}))
+      if (sampled(c.id) !== had) changed(c.id)
     } else if (c.op === 'set' && (c.set || c.voice != null)) {
+      const had = sampled(c.id)
       if (!synths.has(c.id)) synths.set(c.id, { preset: 'keys', set: [] })
       if (c.voice != null) wear(c.id, c.voice)
       if (c.set) synths.get(c.id).set.push(...Object.entries(c.set))
+      if (sampled(c.id) !== had) changed(c.id)
     } else if (c.op === 'mic') {
       // The microphone is a synth by its id, which starts with nothing set: it comes through untouched.
       if (c.do === 'close') { mics.delete(c.id); return }
@@ -1177,6 +1181,25 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
     if (entry.choices) { d.choices = [...entry.choices]; d.default = entry.default }
     return d
   }
+  // "sample" is a wave only for a synth that has been given a sample to play: synths.js's rule (its makeTarget), kept
+  // here because a control asks before there is a player. `wave`: the engine's name for an oscillator's wave.
+  const WAVES = ['osc1.wave', 'osc2.wave']
+  function hasSample(id, wave) {
+    const mine = synths.get(id), holds = wave.replace('wave', 'sample')
+    if (!table || !mine) return false
+    return mine.set.some(([name, value]) => { const at = table.names.get(nameKey(name)); return !!at && at.entry.name === holds && value != null })
+  }
+  const sampled = (id) => WAVES.map((wave) => hasSample(id, wave)).join()
+  function describeFor(id, name) {
+    const d = describe(name), at = d && d.choices && table.names.get(nameKey(name))
+    if (!at || !WAVES.includes(at.entry.name) || hasSample(id, at.entry.name)) return d
+    d.choices = d.choices.filter((c) => c !== 'sample')
+    d.max = d.choices.length - 1
+    return d
+  }
+  // A control tied to a synth is told when what describe says of a setting has changed (dials.js's onChange).
+  const heeding = new Map()    // id -> the functions to call
+  const changed = (id) => { for (const fn of heeding.get(id) || []) { try { fn() } catch (e) { console.error(e) } } }
   const reading = (id) => (player && player.read ? player.read(id, scope) : elsewhere && typeof host.read === 'function' ? host.read(id, scope) : null) || NO_READING
 
   // What has been asked of a synth, oldest first: the plain settings, its ready-made synth's, and its own.
@@ -1219,7 +1242,13 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
     return {
       id,
       describe: (name) => (special(name) === 'voice' ? { name: 'voice', kind: 'choice', min: 0, max: voices().length - 1, default: 'none', choices: voices() }
-        : special(name) === 'listening' ? { name: 'listening', kind: 'bool', min: 0, max: 1, default: false } : describe(named(name))),
+        : special(name) === 'listening' ? { name: 'listening', kind: 'bool', min: 0, max: 1, default: false } : describeFor(id, named(name))),
+      onChange: (fn) => {
+        if (typeof fn !== 'function') return null
+        if (!heeding.has(id)) heeding.set(id, new Set())
+        heeding.get(id).add(fn)
+        return () => { const all = heeding.get(id); if (all) all.delete(fn) }
+      },
       get: (name) => (special(name) === 'voice' ? (synths.get(id) || {}).voice || 'none' : special(name) === 'listening' ? !!(synths.get(id) || {}).listening : valueOf(lists(), named(name))),
       set: (name, value) => {
         // A control gives a choice as its number in the list, and a switch as 1 or 0.

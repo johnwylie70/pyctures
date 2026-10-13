@@ -533,6 +533,87 @@ def test_run_a_sample_is_sent_by_python(browser, pyctures_run, tmp_path):
     assert not w.errors, w.errors
 
 
+LAID_OUT = '''
+from pyctures import *
+from synths import *
+from pydials import *
+
+lead = make_synth("lead")
+bell = make_synth(sample=load_sample("sounds/beep.wav"), note="C4")
+layout(wrap=False)
+with group("lead"):
+    rotary("wave", lead, "wave")
+    select("picked", lead, "wave")
+    with column():
+        dial("pwm", lead, "pwm")
+        dial("rate", lead, "pwm_rate")
+    wrap()
+    with grid(2):
+        space = rotary("space", lead, "reverb_type")
+        dial("decay", lead, "reverb_decay")
+    spacer()
+with row():
+    label("bell")
+    rotary("its wave", bell, "wave")
+page("more")
+dial("extra", 0, 1, 0.5)
+page()
+keyboard(lead)
+given = []
+
+def update(dt):
+    # The sample is given once a hand has chosen the plate.
+    if space.value == "plate" and not given:
+        given.append(1)
+        lead.sample = load_sample("sounds/beep.wav")
+    area = room()
+    js.pyState = [lead.wave, lead.reverb_type, area.width, area.height]
+'''
+
+# The controls that choose, by their labels: what each is, its choices, and the one it is on.
+CHOSEN = """async () => {
+  const { dials } = await import(new URL('pyctures/dials/dials.js', document.baseURI).href)
+  const out = {}
+  for (const c of dials(document.querySelector('[data-pyctures-src] canvas')).all) if (c.choices) out[c.label] = { kind: c.kind, choices: [...c.choices], on: c.choices[c.i] }
+  return out
+}"""
+
+
+def test_a_wave_offers_a_sample_only_to_a_synth_that_has_one(browser, pyctures_run, tmp_path):
+    """A rotary or a select on a synth's wave takes its choices from that synth: "sample" is one only once it has a
+    sample, as synths.js has it. The scene is laid out with every way pydials has (group, row, column, grid, wrap,
+    spacer, page, room), and a rotary on the reverb's type has its five choices and sets it for Python to read."""
+    (tmp_path / "sounds").mkdir()
+    beep(tmp_path / "sounds" / "beep.wav")
+    server = pyctures_run(write(tmp_path, LAID_OUT))
+    w = Watched(browser, server.url, size=(900, 700))
+    w.wait_running()
+    page = w.page
+    wait_for(page, lambda: len(page.evaluate(CHOSEN)) == 4, "the rotaries and the select", 30)
+    made = page.evaluate(CHOSEN)
+    plain = ["sine", "triangle", "saw", "pulse"]
+    assert made["wave"]["choices"] == plain and made["picked"]["choices"] == plain, made
+    assert made["its wave"]["choices"] == plain + ["sample"] and made["its wave"]["on"] == "sample", made
+    assert made["space"]["choices"] == ["room", "hall", "plate", "cathedral", "spring"] and made["space"]["on"] == "room", made
+    assert {made[name]["kind"] for name in ("wave", "its wave", "space")} == {"rotary"} and made["picked"]["kind"] == "select", made
+    assert [c["label"] for c in page.evaluate(CONTROLS) if c["kind"] == "dial"] == ["pwm", "rate", "decay", "extra"]
+    wait_for(page, lambda: (page.evaluate("window.pyState") or [0, 0, 0, 0])[2] > 0, "Python to be told the room the controls leave")
+    # A hand turns the rotary to the plate: the page sets it at once, and Python reads it with the next frame.
+    page.evaluate("""async () => {
+      const { dials } = await import(new URL('pyctures/dials/dials.js', document.baseURI).href)
+      const space = dials(document.querySelector('[data-pyctures-src] canvas')).all.find((c) => c.label === 'space')
+      space.i = 2
+      space.changed('plate')
+    }""")
+    assert page.evaluate("%s.sound.synth('s1').get('reverb_type')" % SCENE) == "plate"
+    wait_for(page, lambda: page.evaluate("window.pyState")[1] == "plate", "Python to read the reverb's type")
+    # Python then gives the synth a sample, and its controls gain the choice without being made again.
+    wait_for(page, lambda: page.evaluate(CHOSEN)["wave"]["choices"] == plain + ["sample"], "the wave to offer the sample")
+    assert page.evaluate(CHOSEN)["picked"]["choices"] == plain + ["sample"]
+    assert page.evaluate("%s.sound.synth('s1').get('wave')" % SCENE) == "sample"
+    assert not w.errors, w.errors
+
+
 @needs_cdn
 @pytest.mark.parametrize("html", [False, True], ids=["folder", "one file"])
 def test_build_takes_a_scene_s_sound_files_along(browser, static_server, tmp_path, html):

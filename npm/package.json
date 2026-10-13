@@ -9,12 +9,16 @@
     ".": "./pyctures.js",
     "./pyctures.js": "./pyctures.js",
     "./pyctures.py": "./pyctures.py",
-    "./three/*": "./three/*"
+    "./three/*": "./three/*",
+    "./synths/*": "./synths/*",
+    "./dials/*": "./dials/*"
   },
   "files": [
     "pyctures.js",
     "pyctures.py",
     "three/",
+    "synths/",
+    "dials/",
     "README.md",
     "LICENSE",
     "THIRD-PARTY-NOTICES"

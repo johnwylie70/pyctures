@@ -13,6 +13,8 @@ tests/screenshots/
 npm/pyctures.js
 npm/pyctures.py
 npm/three/
+npm/synths/
+npm/dials/
 npm/LICENSE
 npm/THIRD-PARTY-NOTICES
 npm/*.tgz

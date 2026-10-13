@@ -12,8 +12,7 @@
  * commands the Python half (`pyctures/__init__.py`) records, answers reads, and
  * reports input. Fixed handles (they must match the Python half): 1 window,
  * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons,
- * 7 plain drawing, 8 saved values, 9 files and databases, 10 sound, 11 dials and other on-screen controls,
- * 15 sheet music (12 is scenes; 13 and 14 are kept for effects and the sound button).
+ * 7 plain drawing, 8 saved values, 9 files and databases, 10 sound, 11 dials and other on-screen controls, 15 sheet music.
  *
  * SOUND AND DIALS are two libraries of their own (synths and dials), carried beside this file in
  * `synths/` and `dials/` and loaded only for a scene that uses them: see soundKeeper and dialsKeeper.
@@ -769,7 +768,7 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
       },
     })
   }
-  // SHEET MUSIC: Python's show_notes() and make_sheet() (the library pynotation), drawn by notation/notation.js.
+  // SHEET MUSIC (the library pynotation).
   const sheets = notation ? notation(canvas) : null
   if (sheets) H.set(15, sheets)
   window.addEventListener('keydown', sendInput)
@@ -866,7 +865,7 @@ const NOTHING_TO_DO = ['free', 0, 0]
 export function usesLibrary(source, name) {
   const lib = LIBRARIES[name]
   if (lib && lib.uses) return lib.uses.test(source || '')
-  // (A scene with sheet music has the sound too: its music is played through it, and lit by its clock.)
+  // (Sheet music brings the sound.)
   return new RegExp('^[ \\t]*(?:from|import)[ \\t]+(?:' + name + (name === 'synths' ? '|pynotation' : '') + ')\\b', 'm').test(source || '')
 }
 
@@ -1429,8 +1428,7 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
     }),
     /** The player, once a sound has been asked for (null when a host takes the commands). */
     get player() { return player },
-    // For a library in the page that keeps time by the sound (sheet music). Is the sound on ('loading', 'waiting' for a
-    // tap, 'on')? Asking begins it. And Python's clock now, as the batches that have come give it (null before the first).
+    // For sheet music: is the sound on ('loading', 'waiting', 'on')? Asking begins it. And Python's clock now (null before a batch).
     state() {
       if (closed || elsewhere) return closed ? 'closed' : 'on'
       if (!mod) { load(); return 'loading' }
@@ -1469,11 +1467,7 @@ function dialsKeeper(o) {
   return libraryKeeper('pydials', 'The controls', o, (m, canvas) => { const api = m.dials(canvas, { fresh: true }); api.close = () => api.panel.close(); return api })
 }
 
-/**
- * What a library's keeper gives a canvas: the library's own object for it (`made`) when its module is there
- * already, and otherwise a stand-in that loads the library when it is first asked for anything, and does then
- * what was asked of it meanwhile.
- */
+/** A library's object for a canvas (`made`), or until its module has loaded a stand-in that keeps what is asked of it. */
 function libraryKeeper(name, what, { given = null, module = null }, made) {
   return (canvas) => {
     if (module) return made(module, canvas)
@@ -2106,7 +2100,6 @@ export class Scene {
         sound: this.sound,
         scenes: this.stage,
         dials: dialsKeeper({ given: this.opt.dials, module: libs.pydials }),
-        // Sheet music (pynotation, handle 15) is given the scene's sound: it asks it whether the sound is on, and Python's clock.
         notation: libraryKeeper('pynotation', 'Sheet music', { given: this.opt.notation, module: libs.pynotation }, (m, canvas) => m.notation(canvas, { fresh: true, sound: this.sound })),
         three: three && three.three,
         addons: three && three.addons,

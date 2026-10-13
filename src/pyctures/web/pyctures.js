@@ -757,7 +757,7 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   // SCENES: a change of scene (see SCENES). `empty` is a scene starting with a clear canvas and the drawing settings as they start.
   if (scenes) {
     H.set(12, {
-      // (A 2D canvas can be read at any time, so a slide is drawn whole; a 3D one cannot, and is moved by a style.)
+      // (A 2D canvas can be read at any time; a 3D one only straight after it is drawn on, so a slide keeps a copy then: see `applied`.)
       transition: (name, seconds, colour) => scenes.transition(name, seconds, colour, !!ctx2d && !isGL),
       show: (...args) => scenes.show(...args),
       empty() {
@@ -870,9 +870,9 @@ export function usesLibrary(source, name) {
 export const LIBRARIES = {
   synths: { folder: 'synths', js: 'synths.js', py: 'synths.py' },
   pydials: { folder: 'dials', js: 'dials.js', py: 'pydials.py' },
-  // Scenes are not imported: a file that names one (a class with Scene in its brackets, or a call of scene(), go()
-  // or next_scene()) is given them. Python asks the same of the same text (_USES_SCENES), and so does `pyctures build`.
-  pyscenes: { folder: 'scenes', js: 'scenes.js', py: 'pyscenes.py', uses: /(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene)[ \t]*\()/m },
+  // Scenes are not imported: a file that names one (a class with Scene in its brackets, or a call of scene(), go(),
+  // next_scene(), config() or section()) is given them. Python asks the same of the same text (_USES_SCENES), and so does `pyctures build`.
+  pyscenes: { folder: 'scenes', js: 'scenes.js', py: 'pyscenes.py', uses: /(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|section)[ \t]*\()/m },
 }
 
 const libraries = {}
@@ -2185,6 +2185,7 @@ export class Scene {
 
   applied(d) {
     const r = this.r
+    if (this.stage) this.stage.caught()
     r.shown++
     if (r.measuring) {
       const m = r.acc.ms

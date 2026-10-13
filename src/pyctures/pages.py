@@ -42,7 +42,7 @@ LIBRARIES = {
 }
 
 # Scenes are not imported: a file that names one is given them (the same words as pyctures.js and the Python half).
-USES_SCENES = re.compile(r"(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene)[ \t]*\()", re.M)
+USES_SCENES = re.compile(r"(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|section)[ \t]*\()", re.M)
 
 
 def uses_library(source, name):

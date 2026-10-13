@@ -221,6 +221,17 @@ def test_scene_options_that_do_not_exist_say_so():
     assert 'config() has no setting "speed". It has: loop, transition, transition_time, transition_color, beats_per_bar' in r["error"]
 
 
+def test_config_alone_at_the_top_of_a_file_is_not_a_mistake():
+    # config() is written first, before any scene is: a file that has got no further yet still runs.
+    r = start("""
+        config(transition="crossfade")
+        def draw():
+            ctx.fill_rect(0, 0, 1, 1)
+    """)
+    assert r["error"] is None and r["running"] and pyctures.S.stage is None
+    assert tick()["error"] is None
+
+
 # ---------------------------------------------------------------- lengths
 
 def test_scene_time_and_progress_run_through_a_length():
@@ -401,7 +412,7 @@ def test_a_file_with_no_scenes_is_one_scene_as_before():
 def test_scenes_are_a_library_that_only_a_file_naming_a_scene_is_given(tmp_path):
     from pyctures import build, pages
     assert not pages.uses_library("world = THREE.Scene()\nship.go(3)\ndef draw():\n    pass\n", "pyscenes")
-    for names in ("class Title(Scene):\n    pass\n", 'scene("title", draw=d)\n', 'go("game")\n', "next_scene()\n"):
+    for names in ("class Title(Scene):\n    pass\n", 'scene("title", draw=d)\n', 'go("game")\n', "next_scene()\n", "config(loop=False)\n", 'section("a")\n'):
         assert pages.uses_library(names, "pyscenes") and pyctures._USES_SCENES.search(names)
     # The page asks the same question with the same words.
     page_words = (pages.WEB / "pyctures.js").read_text(encoding="utf-8")
@@ -595,12 +606,53 @@ class Blue(Scene):
     w.page.wait_for_timeout(500)
     w.page.keyboard.press("a")
     w.page.wait_for_function(SCENE + ".stage.running && " + SCENE + ".stage.name === 'Blue'")
+    # (Used again below, for a slide.)
     seen = []
     for p in (0, 0.5, 1):
         w.page.evaluate("(p) => %s.stage.running.hold(p)" % SCENE, p)
         w.page.wait_for_timeout(150)
         seen.append(pixels(w.page.screenshot(clip={"x": 0, "y": 0, "width": 300, "height": 200}))(100, 100))
     assert near(seen[0], RED) and near(seen[1], [128, 0, 128], 6) and near(seen[2], BLUE), seen
+    assert not w.errors, w.errors
+    w.page.close()
+
+
+def test_a_slide_in_3d_is_drawn_in_pixels_too(browser, pyctures_run, tmp_path):
+    # A 3D canvas can be read only straight after it is drawn on, so the page keeps a copy of each frame the new
+    # scene sends while a slide lasts: the layer alone then holds both halves, with no style on any canvas.
+    w = run(browser, pyctures_run, tmp_path, '''
+renderer = THREE.WebGLRenderer(canvas=canvas)
+camera = THREE.PerspectiveCamera()
+
+class Red(Scene):
+    def setup(self):
+        self.world = THREE.Scene()
+        self.world.background = THREE.Color("rgb(255,0,0)")
+    def draw(self):
+        renderer.render(self.world, camera)
+    def on_key_down(self, key):
+        go("Blue", transition="slide_left", transition_time=60)
+
+class Blue(Scene):
+    def setup(self):
+        self.world = THREE.Scene()
+        self.world.background = THREE.Color("rgb(0,0,255)")
+    def draw(self):
+        renderer.render(self.world, camera)
+''')
+    w.page.wait_for_timeout(500)
+    w.page.keyboard.press("a")
+    w.page.wait_for_function(SCENE + ".stage.running && " + SCENE + ".stage.name === 'Blue'")
+    w.page.evaluate("%s.stage.running.hold(0.5)" % SCENE)
+    w.page.wait_for_timeout(300)
+    got = w.page.evaluate("""() => {
+      const run = %s.stage.running, c = run.layer, g = document.createElement('canvas').getContext('2d')
+      g.canvas.width = c.width; g.canvas.height = c.height
+      g.drawImage(c, 0, 0)
+      const at = (fx) => [...g.getImageData(Math.floor(c.width * fx), Math.floor(c.height / 2), 1, 1).data]
+      return [at(0.25), at(0.75), run.to.style.transform, c.style.transform]
+    }""" % SCENE)
+    assert near(got[0], [255, 0, 0, 255]) and near(got[1], [0, 0, 255, 255]) and got[2:] == ["", ""], got
     assert not w.errors, w.errors
     w.page.close()
 

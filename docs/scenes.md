@@ -251,6 +251,18 @@ Things to know:
 - **Name scenes at the top level.** `scene("name", ...)` inside a function that is called later is too late.
 - **Inside Circuitry Studio**, transitions and the scrubber need a version of the app that has them. Until then every change of scene is a cut, and everything else on this page works.
 
+## For an app that records
+
+A recorder gets a transition right if it does three things.
+
+1. **Draw every canvas in the scene's box, in the order they are in the page**, each over the whole frame. During a transition there is one more canvas straight after the scene's own (`<canvas data-pyctures-transition="crossfade">`), the same size, and what it shows is in its pixels: the old scene at an alpha for a crossfade, the part a wipe has not reached, both scenes for a slide, the colour of a fade. No canvas has an opacity, a clip or a transform set on it, so there is no style to copy. That is so in 3D as well: for a slide the page keeps a copy of each frame the new scene draws.
+2. **Step time through the page's frames.** A transition moves only by the time between one of the page's frames and the next, taken from the times `requestAnimationFrame` hands them (never more than a tenth of a second for one frame). A recorder that hands the frames its own times steps the transition with them. Nothing in a transition reads the clock or uses a timer. Python's frames may come slower than the page's: the transition moves on every frame of the page whether a frame from Python came with it or not.
+3. **Read a 3D canvas straight after Python's drawing is done on it**, in the same turn of the page, as for any 3D program. The transition's own canvas is 2D and can be read at any time.
+
+`scene.stage.running` (where `scene` is what `mount` gives back) is `null`, or the transition going on now, with `name`, `progress` (0 to 1), `layer` (that canvas) and `draw(ctx)`, which paints it over the whole of another canvas. The scrubber is not a canvas and is not part of the picture.
+
+An app with a renderer of its own gets all of this from `scenesKeeper` in `scenes/scenes.js`: its `transition` and `show` are two of the three commands of the page's fixed handle 12 (the third, `empty`, is the renderer's own: clear the canvas and put its drawing settings back as they start), `step(dt)` is called once a page frame, and `caught()` straight after each batch of Python's drawing has been done.
+
 ## If you know Pymations
 
 > [Pymations](https://github.com/johnwylie70/pymations) has scenes too, and the words here are the same wherever the thing is the same.

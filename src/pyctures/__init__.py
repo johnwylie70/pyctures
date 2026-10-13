@@ -1788,9 +1788,10 @@ def _call_frame_functions(dt):
 
 
 # SCENES are the library pyscenes (web/scenes/pyscenes.py), brought in only for a file that names one: a class
-# with Scene in its brackets, or a call of scene(), go() or next_scene(). The page and `pyctures build` ask the
+# with Scene in its brackets, or a call of scene(), go(), next_scene(), config() or section() (the last two because they are written at the top of a
+# file, before its first scene is). The page and `pyctures build` ask the
 # same question of the same text with the same words (pyctures.js LIBRARIES, pages.uses_library).
-_USES_SCENES = re.compile(r"(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene)[ \t]*\()", re.M)
+_USES_SCENES = re.compile(r"(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|section)[ \t]*\()", re.M)
 
 
 def _scenes_library():

@@ -593,9 +593,9 @@ from pydials import *
 lead = make_synth("lead")
 
 def draw_ribbon(c):                            # c.width, c.height, c.value, c.accent, c.theme; shapes in the control's own points
-    c.rect(0, 0, c.width, c.height, c.theme.well, 10)
+    c.rect(0, 0, c.width, c.height, c.theme["well"], 10)
     for i in range(8):
-        c.rect(i * c.width / 8 + 3, 4, c.width / 8 - 6, c.height - 8, c.accent if i == c.value else c.theme.knob, 6)
+        c.rect(i * c.width / 8 + 3, 4, c.width / 8 - 6, c.height - 8, c.accent if i == c.value else c.theme["knob"], 6)
 
 def down(p, c):
     ribbon.set(int(p.x / c.width * 8))

@@ -1012,6 +1012,7 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
   const shared = []            // [[name, value]…] the settings every synth shares
   let volume = 1, table = null
   const midiHeard = new Set()  // Python's listeners for what MIDI received
+  const midiPorts = new Map()  // a synth's id -> its MIDI input, as a control on the screen is tied to it (see midiPort)
   let midiLeave = null, devicesSaid = null
   const soundHeard = new Set() // Python's listeners for what the player says back, and for what is watched
   let soundLeave = null, soundKept = [], micSaid = null, micAsked = false, state = ''
@@ -1029,7 +1030,8 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       // A knob turned a setting here, on the page: remembered, so a dial tied to it turns too.
       if (e.type === 'set') remember({ op: 'set', id: e.id, set: { [e.setting]: e.value } })
       const m = typeof e.time === 'number' && offset !== null ? { ...e, time: e.time - offset } : e
-      if (e.type === 'devices') devicesSaid = m
+      if (e.type === 'devices') { devicesSaid = m; for (const p of midiPorts.values()) p.changed() }
+      else if (e.type === 'noteOn' || e.type === 'noteOff') for (const p of midiPorts.values()) p.heard(e)
       list.push(m)
     }
     if (!list.length || !midiHeard.size || closed) return
@@ -1320,6 +1322,41 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
     if (voice === 'none') mine.under = null
   }
 
+  // THE MIDI INPUT OF A SYNTH THAT IS PYTHON'S: the device and the channel it listens to, as `lead.midiInput()` is for a synth made
+  // on the page, for a choice made on the screen (dials.js's keyboard has a MIDI button for it). It speaks to the MIDI desk of the
+  // player: the browser's own MIDI, or the app's. Nothing is asked until `playFromMidi()`, so nothing asks for permission by itself.
+  function midiPort(id) {
+    if (midiPorts.has(id)) return midiPorts.get(id)
+    const state = { device: 'all', channel: 'all', held: new Set(), hit: 0, at: 0 }
+    const watchers = new Set()
+    const choices = () => (!devicesSaid ? ['no devices'] : devicesSaid.available === false ? ['no MIDI here'] : devicesSaid.inputs && devicesSaid.inputs.length ? ['all', ...devicesSaid.inputs] : ['no devices'])
+    const send = () => own({ op: 'midi', do: 'input', id, name: state.device === 'all' ? null : [state.device], channel: state.channel === 'all' ? null : Number(state.channel) })
+    const port = {
+      describe: (name) => (name === 'device' ? { name, kind: 'text', choices: choices(), default: 'all' }
+        : name === 'channel' ? { name, kind: 'text', choices: ['all', ...Array.from({ length: 16 }, (_, i) => String(i + 1))], default: 'all' } : undefined),
+      get: (name) => (name === 'device' ? (['no devices', 'no MIDI here'].includes(choices()[0]) ? choices()[0] : state.device) : name === 'channel' ? String(state.channel) : undefined),
+      set(name, value) {
+        if (name === 'device') state.device = String(value)
+        else if (name === 'channel') state.channel = String(value)
+        else return port
+        send(); port.changed(); return port
+      },
+      onChange(fn) { if (typeof fn !== 'function') return null; watchers.add(fn); return () => watchers.delete(fn) },
+      level: () => Math.max(0, state.hit * (1 - (performance.now() - state.at) / 350)),
+      notes: () => [...state.held],
+      changed() { for (const fn of watchers) fn() },
+      state,
+      // What the desk heard, from the device and the channel this port listens to.
+      heard(e) {
+        if (state.device !== 'all' && e.device && e.device !== state.device) return
+        if (state.channel !== 'all' && e.channel !== undefined && e.channel !== Number(state.channel)) return
+        if (e.type === 'noteOn') { state.held.add(e.note); state.hit = e.velocity; state.at = performance.now() } else state.held.delete(e.note)
+      },
+    }
+    midiPorts.set(id, port)
+    return port
+  }
+
   function synth(id) {
     const lists = () => listsOf(id)
     const isMic = () => mics.has(id)
@@ -1358,6 +1395,17 @@ function soundKeeper({ host = null, src = '', module = null, onState = null, mid
       },
       noteOn: (note, velocity = 0.8) => own({ op: 'note', id, note: [note], len: null, vel: velocity }),
       noteOff: (note) => own({ op: 'off', id, note: [note] }),
+      midiInput: () => midiPort(id),
+      // A MIDI keyboard plays this synth: asks for the devices (which is when the browser asks the person, and where the
+      // app has its own MIDI it does not), listens, and plays from the device and the channel the port has.
+      playFromMidi: (o) => {
+        const port = midiPort(id)
+        if (o && o.channel !== undefined) port.state.channel = String(o.channel)
+        if (!elsewhere && !midiLeave) joinMidi(player)
+        own({ op: 'midi', do: 'devices' }); own({ op: 'midi', do: 'listen' })
+        own({ op: 'midi', do: 'input', id, name: port.state.device === 'all' ? null : [port.state.device], channel: port.state.channel === 'all' ? null : Number(port.state.channel) })
+        own({ op: 'midi', do: 'play', id, channel: port.state.channel === 'all' ? null : Number(port.state.channel) })
+      },
       samples: () => reading(id).samples,
       level: () => reading(id).level,
       notes: () => reading(id).notes,

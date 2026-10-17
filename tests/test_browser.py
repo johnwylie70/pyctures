@@ -555,4 +555,4 @@ def test_docs_python_runs(browser, pyctures_run, tmp_path, name, code):
     p = pyctures_run(scene)
     w = Watched(browser, p.url)
     # A scene that only makes controls draws nothing of its own: they are on a layer over it.
-    w.check("docs-%s.png" % name, min_colours=1 if ("from pydials" in code and "def draw" not in code) or "background()" in code else 2)
+    w.check("docs-%s.png" % name, min_colours=1 if ("from pydials" in code and "def draw(" not in code) or "background()" in code else 2)

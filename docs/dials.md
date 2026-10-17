@@ -585,6 +585,10 @@ def draw():
 `spectrum(lead)` shows what is in a sound as bars, the low notes at the left. The bands are spaced the way notes are, from 30 Hz up, and a bar is as tall as the sound is loud in its band, from -90 dB to 0 dB (a full-strength sine reaches the top). A tick above each bar holds its highest point for a moment and falls.
 
 ```python
+from pyctures import *
+from synths import *
+from pydials import *
+
 lead = make_synth("lead")
 spectrum(lead, bands=48)
 ```
@@ -636,6 +640,11 @@ custom("level", width=80, height=110, source=lead, animate=True, draw=draw_level
 ![A level meter in dB, a spectrum of 48 bars with peak ticks and the wave, drawn by custom(), above a keyboard with three keys held](images/custom-analyser.png)
 
 ```python
+from pyctures import *
+from synths import *
+from pydials import *
+
+lead = make_synth("lead")
 BANDS = 48
 bars = [0.0] * BANDS
 

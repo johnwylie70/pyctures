@@ -53,9 +53,10 @@ All of them take `x=` and `y=` (to place it by hand: its top left corner), `colo
 | `toggle(label, on)` | A switch: `if mute:` |
 | `rotary(label, choices, start)` | A knob that clicks between a few choices, with a notch for each and their names round it where there is room. Drag to turn it from notch to notch, or tap a name. `mode.value` is the choice. `rotary("reverb", lead, "reverb_type")` takes the choices from the synth. The choice is written under the knob only where no names are round it; `show_value=True` or `False` says otherwise |
 | `select(label, choices, start)` | One of a list, stepped through with the arrows at its sides. `wave.value` is the choice. `select("wave", lead, "wave")` takes the choices from the synth, and keeps up when they change (`"sample"` is a wave only once the synth has a sample). `style="rotary"` makes it a rotary |
-| `keyboard(target, octave=4)` | A piano keyboard along the bottom. `piano.notes` is what is held now (60 is middle C). `on_note_on=` is given the note and how hard. Also `octaves=`, `height=`, and `animate=False` (the keys jump to a new octave, not slide) |
+| `keyboard(target, octave=4)` | A piano keyboard along the bottom. `piano.notes` is what is held now (60 is middle C). `midi=True` adds a MIDI button: [see below](#the-midi-button). `on_note_on=` is given the note and how hard. Also `octaves=`, `height=`, and `animate=False` (the keys jump to a new octave, not slide) |
 | `scope(source)` | A line of numbers, live: a synth's wave, or with no source, `graph.push(value)` draws any value over time |
 | `meter(source)` | A level from 0 to 1 as a bar of lights |
+| `custom(label, draw=..., on_down=..., on_move=..., on_up=..., source=...)` | A control of your own: see [Your own controls](#your-own-controls) |
 | `label(text)` | Words. Made just before some controls, it is their heading, on the plate they share |
 | `group`, `row`, `column`, `grid`, `page`, `spacer`, `wrap` | What goes with what: see [Laying it out](#laying-it-out) |
 | `number`, `text_box`, `readout`, `checkbox`, `choose`, `radio`, `dropdown`, `xy_pad`, `colour_picker`, `progress`, `light`, `busy`, `range_slider`, `fader`, `joystick`, `dpad`, `action_button`, `envelope`, `step_grid`, `pads`, `pitch_wheel`, `mod_wheel`, `steps`, `trance_gate`, `arp_pattern`, `drum_seq` | More controls, for any program, for games and for music: see [More controls](#more-controls) |
@@ -577,6 +578,52 @@ def draw():
     rect(0, height - 60, width, 60, "seagreen")
     circle(width / 2, height - 90 - y, 30, "gold")
 ```
+
+## Your own controls
+
+`custom` makes a control of your own: you draw it, and say what a finger does to it. It sits in the layout like any other control, has a `value` and an `on_change`, and can listen to a synth. Python sends what `draw` paints to the page as a list of shapes, so a control that changes only when touched costs nothing while it is still.
+
+![A ribbon of eight keys with one held, a ring that is as large as the sound is loud, a tempo dial and a row of steps, all made with custom() (made with the JavaScript spelling)](images/dials-custom-instrument.png)
+
+```python
+from pyctures import *
+from synths import *
+from pydials import *
+
+lead = make_synth("lead")
+
+def draw_ribbon(c):                            # c.width, c.height, c.value, c.accent, c.theme; shapes in the control's own points
+    c.rect(0, 0, c.width, c.height, c.theme.well, 10)
+    for i in range(8):
+        c.rect(i * c.width / 8 + 3, 4, c.width / 8 - 6, c.height - 8, c.accent if i == c.value else c.theme.knob, 6)
+
+def down(p, c):
+    ribbon.set(int(p.x / c.width * 8))
+    lead.play(57 + ribbon.value, 0.4)
+
+def move(p, c):
+    i = int(p.x / c.width * 8)
+    if i != ribbon.value:
+        ribbon.set(i)
+
+ribbon = custom("ribbon", width=340, height=110, value=-1, draw=draw_ribbon, on_down=down, on_move=move,
+                on_up=lambda p, c: setattr(ribbon, "value", -1))
+
+def draw_level(c):                             # source=lead gives draw c.level and c.samples
+    c.circle(c.width / 2, c.height / 2, 14 + 26 * c.level, c.accent)
+
+custom("level", width=80, height=110, source=lead, animate=True, draw=draw_level)
+```
+
+`on_down`, `on_move` and `on_up` get the finger's place in the control's own points (`p.x`, `p.y`), `on_frame(c, now)` is called every frame (to keep time), `on_key(event, c)` hears keys, and `animate=True` draws every frame. `ribbon.set(value)` is a change by hand (it calls `on_change`); `ribbon.value = x` and `ribbon.redraw()` only draw. The painter has `c.rect`, `c.frame`, `c.circle`, `c.ring`, `c.line`, `c.lines`, `c.polygon`, `c.text` and `c.clear`. The whole of it is in [pydials](https://github.com/johnwylie70/pydials#your-own-controls).
+
+## The MIDI button
+
+`keyboard(lead, midi=True)` puts a MIDI button on the keyboard's strip. A tap makes the synth listen to MIDI (the browser asks first) and opens a panel for the device and the channel: every device or one, every channel or 1 to 16. It is the synth's own `lead.midi_input()`, so a choice made in code shows in the panel.
+
+![The keyboard's MIDI panel open, with two devices and sixteen channels (made with the JavaScript spelling)](images/dials-midi-panel.png)
+
+Where the browser has no MIDI, the panel says so and the keyboard goes on working from the screen and the computer's keys.
 
 ## How it works
 

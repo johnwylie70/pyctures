@@ -55,8 +55,9 @@ All of them take `x=` and `y=` (to place it by hand: its top left corner), `colo
 | `select(label, choices, start)` | One of a list, stepped through with the arrows at its sides. `wave.value` is the choice. `select("wave", lead, "wave")` takes the choices from the synth, and keeps up when they change (`"sample"` is a wave only once the synth has a sample). `style="rotary"` makes it a rotary |
 | `keyboard(target, octave=4)` | A piano keyboard along the bottom. `piano.notes` is what is held now (60 is middle C). `midi=True` adds a MIDI button: [see below](#the-midi-button). `on_note_on=` is given the note and how hard. Also `octaves=`, `height=`, and `animate=False` (the keys jump to a new octave, not slide) |
 | `scope(source)` | A line of numbers, live: a synth's wave, or with no source, `graph.push(value)` draws any value over time |
+| `spectrum(source)` | The frequencies in a sound as bars, low to high from the left, spaced as notes are: a synth, a function that returns a list of numbers, or a list. Options: `bands=` (32), `peaks=False`, `rate=` (48000): see [Spectrum](#spectrum) |
 | `meter(source)` | A level from 0 to 1 as a bar of lights |
-| `custom(label, draw=..., on_down=..., on_move=..., on_up=..., source=...)` | A control of your own: see [Your own controls](#your-own-controls) |
+| `custom(label, draw=..., on_down=..., on_move=..., on_up=..., source=..., design=...)` | A control of your own: see [Your own controls](#your-own-controls) |
 | `label(text)` | Words. Made just before some controls, it is their heading, on the plate they share |
 | `group`, `row`, `column`, `grid`, `page`, `spacer`, `wrap` | What goes with what: see [Laying it out](#laying-it-out) |
 | `number`, `text_box`, `readout`, `checkbox`, `choose`, `radio`, `dropdown`, `xy_pad`, `colour_picker`, `progress`, `light`, `busy`, `range_slider`, `fader`, `joystick`, `dpad`, `action_button`, `envelope`, `step_grid`, `pads`, `pitch_wheel`, `mod_wheel`, `steps`, `trance_gate`, `arp_pattern`, `drum_seq` | More controls, for any program, for games and for music: see [More controls](#more-controls) |
@@ -579,6 +580,19 @@ def draw():
     circle(width / 2, height - 90 - y, 30, "gold")
 ```
 
+## Spectrum
+
+`spectrum(lead)` shows what is in a sound as bars, the low notes at the left. The bands are spaced the way notes are, from 30 Hz up, and a bar is as tall as the sound is loud in its band, from -90 dB to 0 dB (a full-strength sine reaches the top). A tick above each bar holds its highest point for a moment and falls.
+
+```python
+lead = make_synth("lead")
+spectrum(lead, bands=48)
+```
+
+![A spectrum of a chord on a saw wave, a scope of the wave and a level meter above a keyboard with three keys held](images/spectrum.png)
+
+It takes what `scope` takes: a synth, a function that returns a list of numbers, or a list. `bands=` is how many bars (32), `peaks=False` leaves out the ticks and `rate=` (48000) is the sound card's rate. The page works the bars out, so in Python a synth in the page costs Python nothing.
+
 ## Your own controls
 
 `custom` makes a control of your own: you draw it, and say what a finger does to it. It sits in the layout like any other control, has a `value` and an `on_change`, and can listen to a synth. Python sends what `draw` paints to the page as a list of shapes, so a control that changes only when touched costs nothing while it is still.
@@ -616,6 +630,24 @@ custom("level", width=80, height=110, source=lead, animate=True, draw=draw_level
 ```
 
 `height` is the drawing area (a label adds its own line above it, so `c.height` is the height you asked for). `on_down`, `on_move` and `on_up` get the finger's place in the control's own points (`p.x`, `p.y`), `on_frame(c, now)` is called every frame (to keep time), `on_key(event, c)` hears keys, and `animate=True` draws every frame. `ribbon.set(value)` is a change by hand (it calls `on_change`); `ribbon.value = x` and `ribbon.redraw()` only draw. The painter has `c.rect`, `c.frame`, `c.circle`, `c.ring`, `c.line`, `c.lines`, `c.polygon`, `c.text` and `c.clear`. The whole of it is in [pydials](https://github.com/johnwylie70/pydials#your-own-controls).
+
+`design=(w, h)` is the size you draw for: `c.width` and `c.height` are then that, and what you draw is scaled to fit the control's box and centred in it, so a finger comes back in points of the design. `c.spectrum` is what a source is playing as `bands=` (32) bands, low to high, each from 0 to 1 for -90 dB to 0 dB, worked out in the page from the whole wave (Python's `c.samples` is thinned to at most 128 points, too few for that); `c.samples`, `c.level` and `c.input` are there too. A control is drawn on a layer of its own, the size of its area, so nothing it draws can be seen outside it: a shape far bigger than the box is cut at its edge. And it can be an analyser of your own:
+
+![A level meter in dB, a spectrum of 48 bars with peak ticks and the wave, drawn by custom(), above a keyboard with three keys held](images/custom-analyser.png)
+
+```python
+BANDS = 48
+bars = [0.0] * BANDS
+
+def paint_analyser(c):
+    c.clear(c.theme["well"])
+    for i in range(BANDS):
+        v = c.spectrum[i] if c.spectrum and i < len(c.spectrum) else 0.0
+        bars[i] = max(v, bars[i] - 0.02)                          # rise at once, fall away
+        c.rect(100 + i * 520 / BANDS + 1, 24 + 180 * (1 - bars[i]), 520 / BANDS - 2, 180 * bars[i], c.accent)
+
+custom(width=640, height=300, design=(640, 300), bands=BANDS, source=lead, animate=True, draw=paint_analyser)
+```
 
 ## The MIDI button
 

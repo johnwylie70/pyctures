@@ -383,6 +383,12 @@ Pyctures comes from [Circuitry Studio](https://www.circuitry.dev), where Python 
 
 Its Pyctures page, where you can edit a scene and run it: [circuitry.dev/pyctures](https://www.circuitry.dev/pyctures). Its help pages: [Pyctures help](https://www.circuitry.dev/docs/pyctures) · [2D functions](https://www.circuitry.dev/docs/pyctures/2d-functions) · [3D functions](https://www.circuitry.dev/docs/pyctures/3d-functions) · [Colours](https://www.circuitry.dev/docs/pyctures/colours) · [Bringing a JavaScript example across](https://www.circuitry.dev/docs/pyctures/from-javascript)
 
+## Megademo
+
+[![Megademo: a cube and a glass shape turning over a chessboard floor, all drawn by the scene](docs/images/megademo.jpg)](https://github.com/johnwylie70/megademo)
+
+[Megademo](https://github.com/johnwylie70/megademo) is a demo in the style of the ones made on the C64 and Amiga, made in Circuitry Studio. A whole demo, in one Python file: the program draws everything, a tracker song plays, and effects run on the graphics card. It is one file, `main.py`, and it is worth reading for how it is done. [Watch it on YouTube](https://youtu.be/6fKMwrOik5k).
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE). Pyctures includes three.js (MIT) and loads Pyodide (MPL 2.0) from its CDN; see [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES).

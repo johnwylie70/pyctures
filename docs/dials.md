@@ -615,7 +615,7 @@ def draw_level(c):                             # source=lead gives draw c.level 
 custom("level", width=80, height=110, source=lead, animate=True, draw=draw_level)
 ```
 
-`on_down`, `on_move` and `on_up` get the finger's place in the control's own points (`p.x`, `p.y`), `on_frame(c, now)` is called every frame (to keep time), `on_key(event, c)` hears keys, and `animate=True` draws every frame. `ribbon.set(value)` is a change by hand (it calls `on_change`); `ribbon.value = x` and `ribbon.redraw()` only draw. The painter has `c.rect`, `c.frame`, `c.circle`, `c.ring`, `c.line`, `c.lines`, `c.polygon`, `c.text` and `c.clear`. The whole of it is in [pydials](https://github.com/johnwylie70/pydials#your-own-controls).
+`height` is the drawing area (a label adds its own line above it, so `c.height` is the height you asked for). `on_down`, `on_move` and `on_up` get the finger's place in the control's own points (`p.x`, `p.y`), `on_frame(c, now)` is called every frame (to keep time), `on_key(event, c)` hears keys, and `animate=True` draws every frame. `ribbon.set(value)` is a change by hand (it calls `on_change`); `ribbon.value = x` and `ribbon.redraw()` only draw. The painter has `c.rect`, `c.frame`, `c.circle`, `c.ring`, `c.line`, `c.lines`, `c.polygon`, `c.text` and `c.clear`. The whole of it is in [pydials](https://github.com/johnwylie70/pydials#your-own-controls).
 
 ## The MIDI button
 

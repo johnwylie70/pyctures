@@ -89,7 +89,7 @@ def build_single(scene, out, add=(), title=None, say=print):
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(page, encoding="utf-8")
     say("Built %s (%d KB%s)" % (_short(out), (len(page.encode("utf-8")) + 1023) // 1024,
-                                 "".join(", with " + n for n in (["three.js"] if three else []) + [{"pyscenes": "scenes", "pymanners": "the sound button"}.get(n, n) for n in libraries])))
+                                 "".join(", with " + n for n in (["three.js"] if three else []) + [{"pyscenes": "scenes", "pymanners": "the sound button", "pysay": "the voice", "pykinetic": "kinetic text", "pycodealong": "the code-along"}.get(n, n) for n in libraries])))
     if images:
         say("  with %d image%s: %s" % (len(images), "" if len(images) == 1 else "s", ", ".join(images)))
     if sounds:

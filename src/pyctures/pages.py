@@ -45,6 +45,15 @@ ASSETS = {
     # The sound button (`sound_button()`): Pyctures' own, loaded only for a file that names it.
     "manners/manners.js": WEB / "manners" / "manners.js",
     "manners/pymanners.py": WEB / "manners" / "pymanners.py",
+    # say(): the computer talks. say.js is pictures.js's own, brought here by scripts/sync_libraries.py; loaded only for a file that calls it.
+    "voice/say.js": WEB / "voice" / "say.js",
+    "voice/pysay.py": WEB / "voice" / "pysay.py",
+    # Kinetic text (word_slam() and the rest): kinetic.js is pictures.js's own, brought here by scripts/sync_libraries.py; loaded only for a file that names one.
+    "kinetic/kinetic.js": WEB / "kinetic" / "kinetic.js",
+    "kinetic/pykinetic.py": WEB / "kinetic" / "pykinetic.py",
+    # The code-along (code_along()): codealong.js is pictures.js's own, brought here by scripts/sync_libraries.py; loaded only for a file that names it (with the kinetic text it takes its look from).
+    "codealong/codealong.js": WEB / "codealong" / "codealong.js",
+    "codealong/pycodealong.py": WEB / "codealong" / "pycodealong.py",
 }
 
 # The libraries a scene asks for by importing them: the name it imports -> (its folder, the page's half,
@@ -56,6 +65,9 @@ LIBRARIES = {
     "pynotation": ("notation", "notation.js", "pynotation.py"),
     "pyvisualfx": ("visualfx", "visualfx.js", "pyvisualfx.py"),
     "pymanners": ("manners", "manners.js", "pymanners.py"),
+    "pysay": ("voice", "say.js", "pysay.py"),
+    "pykinetic": ("kinetic", "kinetic.js", "pykinetic.py"),
+    "pycodealong": ("codealong", "codealong.js", "pycodealong.py"),
 }
 
 # Scenes are not imported: a file that names one is given them (the same words as pyctures.js and the Python half).
@@ -64,6 +76,15 @@ USES_SCENES = re.compile(r"(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|
 # Nor is the sound button: a file that names sound_button, sound_is_on or ask_about_sound is given it.
 USES_MANNERS = re.compile(r"sound_button|sound_is_on|ask_about_sound")
 
+# Nor is say(): a file that calls it, or speaking(), voice_level() or mouth(), is given the voice.
+USES_SAY = re.compile(r"(?:^|[^.\w])(?:say|say_at|voices|speaker|speaking|voice_level|voice_shape|mouth)[ \t]*\(", re.M)
+
+# Nor is kinetic text: a file that names one of its functions (or house_style) is given it.
+USES_KINETIC = re.compile(r"(?:^|[^.\w])(?:word_slam|letter_wave|letter_bounce|typewriter_text|glitch_text|mask_reveal|scale_pop|ticker_text|count_up|highlight_sweep|kinetic_\w+|code_along\w*|house_style|seeded_random)\b", re.M)
+
+# Nor is the code-along: a file that names code_along or code_along_stage_at is given it (and, for its look, the kinetic text: USES_KINETIC has it too).
+USES_CODEALONG = re.compile(r"(?:^|[^.\w])code_along\w*", re.M)
+
 
 def uses_library(source, name):
     """Whether a scene imports a library (the same test the browser half makes)."""
@@ -71,6 +92,12 @@ def uses_library(source, name):
         return USES_SCENES.search(source) is not None
     if name == "pymanners":
         return USES_MANNERS.search(source) is not None
+    if name == "pysay":
+        return USES_SAY.search(source) is not None
+    if name == "pykinetic":
+        return USES_KINETIC.search(source) is not None
+    if name == "pycodealong":
+        return USES_CODEALONG.search(source) is not None
     # (A scene with sheet music has the sound too: its music is played through it, and lit by its clock.)
     names = "synths|pynotation" if name == "synths" else name
     return re.search(r"^[ \t]*(?:from|import)[ \t]+(?:%s)\b" % names, source, re.M) is not None

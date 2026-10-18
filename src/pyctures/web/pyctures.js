@@ -12,7 +12,7 @@
  * commands the Python half (`pyctures/__init__.py`) records, answers reads, and
  * reports input. Fixed handles (they must match the Python half): 1 window,
  * 2 canvas, 3 THREE, 4 the 2D context (made on first use), 5 addons,
- * 7 plain drawing, 8 saved values, 9 files and databases, 10 sound, 11 dials and other on-screen controls, 12 scenes, 13 effects, 15 sheet music.
+ * 7 plain drawing, 8 saved values, 9 files and databases, 10 sound, 11 dials and other on-screen controls, 12 scenes, 13 effects, 15 sheet music, 17 kinetic text, 18 the code-along.
  *
  * SOUND AND DIALS are two libraries of their own (synths and dials), carried beside this file in
  * `synths/` and `dials/` and loaded only for a scene that uses them: see soundKeeper and dialsKeeper.
@@ -341,7 +341,7 @@ export function inputOf(source) {
  * onApplied({reads, errors, ms, n, timing}), onReads(reads) (a promise has
  * settled), isActive() (has the keyboard).
  */
-export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, sound = null, dials = null, scenes = null, notation = null, effects = null, hooks }) {
+export function createRenderer(canvas, { three = null, addons = null, images = null, input = null, saved = null, files = null, sound = null, dials = null, scenes = null, notation = null, effects = null, kinetic = null, codealong = null, mouth = null, hooks }) {
   const H = new Map()
   let ctx2d = null
   let dpr = 1, cssW = 0, cssH = 0
@@ -772,6 +772,28 @@ export function createRenderer(canvas, { three = null, addons = null, images = n
   const sheets = notation ? notation(canvas) : null
   if (sheets) H.set(15, sheets)
   // EFFECTS (pyvisualfx): frame(dt) is run when the batch is done.
+  // KINETIC TEXT (pykinetic): the effects are drawn here, in the order the batch has them, on the scene's 2D canvas. Python gives every call its time.
+  if (kinetic) {
+    let kept = null
+    const names = () => (kept ??= kinetic.keep({ ctx: getCtx(), size: () => [cssW, cssH] }).names)
+    H.set(17, new Proxy({}, { has: () => true, get: (_, n) => (...a) => names()[n](...a) }))
+  }
+  // THE CODE-ALONG (pycodealong): the code, its panels and callouts are drawn here, in the order the batch has them; a Python stage is run by Python between
+  // codeAlongBegin and codeAlongEnd, and a JavaScript one here, with the plain drawing functions and a width and height of the pane's own.
+  if (codealong && kinetic) {
+    let kept = null
+    const names = () => (kept ??= codealong.keep({
+      ctx: getCtx(), kit: kinetic, size: () => [cssW, cssH], time: () => 0,
+      stage: (code, w, h, seed, chance) => {
+        const drawing = Object.keys(plainDrawing)
+        const run = new Function(...drawing, 'width', 'height', 'random', 'pick', 'degrees', `return (() => {\n${code}\n;return { setup: typeof setup === 'function' ? setup : undefined, update: typeof update === 'function' ? update : undefined, draw: typeof draw === 'function' ? draw : undefined }\n})()\n//# sourceURL=code-along-stage.js`)
+        return run(...drawing.map((n) => (...a) => plainDrawing[n](...a)), w, h, chance.random, chance.pick, (n) => n * (Math.PI / 180))
+      },
+    }).names)
+    H.set(18, new Proxy({}, { has: () => true, get: (_, n) => (...a) => names()[n](...a) }))
+  }
+  // THE MOUTH (pysay's mouth()): drawn here too, in the order the batch has it. Python gives the level it was told with the frame.
+  if (mouth) H.set(16, { mouth: (...a) => { const c = getCtx(); if (c) mouth(c, [cssW, cssH], ...a) } })
   const fx = effects ? effects(canvas) : null
   if (fx) H.set(13, new Proxy({}, { has: () => true, get: (_, n) => (n === 'frame' ? (dt) => queueMicrotask(() => fx.frame(dt)) : (...a) => fx[n](...a)) }))
   window.addEventListener('keydown', sendInput)
@@ -886,6 +908,12 @@ export const LIBRARIES = {
   // next_scene(), config() or section()) is given them. Python asks the same of the same text (_USES_SCENES), and so does `pyctures build`.
   pyscenes: { folder: 'scenes', js: 'scenes.js', py: 'pyscenes.py', uses: /(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|section)[ \t]*\()/m },
   pymanners: { folder: 'manners', js: 'manners.js', py: 'pymanners.py', uses: /sound_button|sound_is_on|ask_about_sound/ },
+  // say(): not imported either; a file that calls it (or speaking(), voice_level() or mouth()) is given the voice (pictures.js's voice/say.js, with pysay.py). pages.USES_SAY is the same test.
+  pysay: { folder: 'voice', js: 'say.js', py: 'pysay.py', uses: /(?:^|[^.\w])(?:say|say_at|voices|speaker|speaking|voice_level|voice_shape|mouth)[ \t]*\(/m },
+  // Kinetic text: not imported; a file that names word_slam(), count_up() and the rest is given it (pages.USES_KINETIC is the same test).
+  pykinetic: { folder: 'kinetic', js: 'kinetic.js', py: 'pykinetic.py', uses: /(?:^|[^.\w])(?:word_slam|letter_wave|letter_bounce|typewriter_text|glitch_text|mask_reveal|scale_pop|ticker_text|count_up|highlight_sweep|kinetic_\w+|code_along\w*|house_style|seeded_random)\b/m },
+  // The code-along: not imported; a file that names code_along() or code_along_stage_at() is given it, with the kinetic text it takes its look from (pages.USES_CODEALONG is the same test).
+  pycodealong: { folder: 'codealong', js: 'codealong.js', py: 'pycodealong.py', uses: /(?:^|[^.\w])code_along\w*/m },
 }
 
 const libraries = {}
@@ -2123,6 +2151,11 @@ export class Scene {
         if (name === 'synths' && typeof host.send === 'function' && !host.synths && !usesLibrary(source, 'pydials')) continue
         try { libs[name] = await loadLibrary(name, name === 'synths' ? host.synths : name === 'pydials' ? this.opt.dials : name === 'pynotation' ? this.opt.notation : name === 'pyscenes' ? this.opt.scenes : null) } catch (e) { this.log('err', `${name} could not load: ${(e && e.message) || e}`) }
       }
+      // A recorded scene that can say a line through a voice host plays it through the sound, which has to be ready before the
+      // frame the line is said in (else the engine is still loading for the frames after it, and what the mouth reads is silent).
+      if (this.stepping && libs.pysay && !libs.synths && (this.opt.voice ?? globalThis.pictureHost?.voice)) {
+        try { libs.synths = await loadLibrary('synths', host.synths) } catch (e) { this.log('err', `synths could not load: ${(e && e.message) || e}`) }
+      }
       // Everything the scene has stored, to put in Python's file system before it starts.
       const stored = this.transport.keepsFiles ? await this.files.all() : []
       if (token !== r.token) return
@@ -2155,6 +2188,9 @@ export class Scene {
         scenes: this.stage,
         dials: dialsKeeper({ given: this.opt.dials, module: libs.pydials }),
         notation: libraryKeeper('pynotation', 'Sheet music', { given: this.opt.notation, module: libs.pynotation }, (m, canvas) => m.notation(canvas, { fresh: true, sound: this.sound })),
+        kinetic: libs.pykinetic,
+        codealong: libs.pycodealong,
+        mouth: libs.pysay && ((c, area, x, y, size, style, color, level, width) => libs.pysay.drawMouth(c, x, y, { size, style, color, level, width, area })),
         effects: libs.pyvisualfx && ((canvas) => libs.pyvisualfx.effects(canvas, { fresh: true, manual: true, sound: () => this.sound && this.sound.output && this.sound.output(), under: () => this.stage && this.stage.running && this.stage.running.layer })),
         three: three && three.three,
         addons: three && three.addons,
@@ -2171,6 +2207,7 @@ export class Scene {
         },
       })
       if (libs.pymanners) libs.pymanners.keep(this, source, () => activeScene === this)
+      if (libs.pysay) libs.pysay.keep(this, source)
       r.measuring = measureSwitch(this.el)
       this.watch()
       r.acc = { frames: 0, shown: 0, missed: 0, worst: 0, cmds: 0, ms: {} }
@@ -2494,6 +2531,8 @@ function serverMode() {
  * whose open may push frames (synths.js's docs/microphone.md), or false for none. Without it the browser is asked
  * when a scene first calls use_microphone(). `options.save(file)` is given { name, bytes, type } for each file
  * save_sound() makes, in place of the scene's files (when `storage` has writeBytes) or a download.
+ * `options.voice` (from a host): the voice host say() asks, { lookup(req), note(req), speakDraft(req)? } (voice/say.js);
+ * else `window.pictureHost.voice`, else the device's own speech.
  */
 export function mount(el, options = {}) {
   if (el.pycturesScene) return el.pycturesScene
@@ -2517,6 +2556,7 @@ export function mount(el, options = {}) {
     save: options.save,
     dials: options.dials,
     notation: options.notation,
+    voice: options.voice,
   })
   // For a host that records the scene a frame at a time: `await scene.ready`, then `await scene.step()` for each frame.
   if (options.stepped) scene.ready = import(new URL('stepped/stepped.js', BASE)).then((m) => m.stepped(scene, options.stepped))

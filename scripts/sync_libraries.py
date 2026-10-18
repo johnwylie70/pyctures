@@ -14,6 +14,7 @@ done there is not brought across. ``--working`` takes the files as they are.
 
 The tests fail while a copy differs from what the repository beside this one last committed.
 """
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -40,6 +41,12 @@ COPIES = {
     ("visualfx.js", "visualfx.js"): WEB / "visualfx" / "visualfx.js",
     ("visualfx.js", "LICENSE"): WEB / "visualfx" / "LICENSE",
     ("pyvisualfx", "src/pyvisualfx/__init__.py"): WEB / "visualfx" / "pyvisualfx.py",
+    # say(): pictures.js's voice/say.js (the page's half of pysay.py, which is Pyctures' own and lives in web/voice).
+    ("pictures.js", "voice/say.js"): WEB / "voice" / "say.js",
+    # Kinetic text: pictures.js's kinetic/kinetic.js, house style and all (the page's half of pykinetic.py, which is Pyctures' own in web/kinetic).
+    ("pictures.js", "kinetic/kinetic.js"): WEB / "kinetic" / "kinetic.js",
+    # The code-along: pictures.js's codealong/codealong.js (the page's half of pycodealong.py, which is Pyctures' own in web/codealong).
+    ("pictures.js", "codealong/codealong.js"): WEB / "codealong" / "codealong.js",
 }
 
 
@@ -64,5 +71,20 @@ def main(working=False, beside=BESIDE):
         print("copied %-28s %7d bytes  from %s" % (to.relative_to(WEB), len(data), repo))
 
 
+def write_style():
+    """The house style, from the copy of kinetic.js here, into pykinetic.py between its STYLE marks (Python cannot ask the page)."""
+    page = WEB / "kinetic" / "kinetic.js"
+    py = WEB / "kinetic" / "pykinetic.py"
+    out = subprocess.run(["node", "--input-type=module", "-e", "import('%s').then((m) => console.log(JSON.stringify(m.houseStyle)))" % page.as_uri()],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    text = py.read_text()
+    marks = re.compile(r"# STYLE:BEGIN\n.*?# STYLE:END", re.S)
+    new = marks.sub(lambda m: '# STYLE:BEGIN\n_STYLE = json.loads(r"""%s""")\n# STYLE:END' % out, text)
+    if new != text:
+        py.write_text(new)
+        print("wrote the house style into kinetic/pykinetic.py")
+
+
 if __name__ == "__main__":
     main("--working" in sys.argv)
+    write_style()

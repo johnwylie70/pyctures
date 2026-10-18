@@ -533,7 +533,7 @@ def _doc_programs():
     from conftest import ROOT
     found = []
     for doc in ("README.md", "docs/from-javascript.md", "docs/getting-started.md", "docs/website.md",
-                "docs/sound.md", "docs/dials.md", "docs/sheet-music.md", "docs/effects.md"):
+                "docs/sound.md", "docs/say.md", "docs/dials.md", "docs/sheet-music.md", "docs/effects.md"):
         blocks = re.findall(r"```python\n(.*?)```", (ROOT / doc).read_text(), re.S)
         for i, code in enumerate(blocks):
             # A fragment that leans on names made elsewhere (the README's

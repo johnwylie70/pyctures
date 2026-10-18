@@ -170,7 +170,7 @@ def draw():
     text("Click for a sound", width / 2, height / 2, "white", 28, "centre")
 ```
 
-There are ready-made game sounds, notes and tunes, and synths you shape yourself: [Sound and music](docs/sound.md). A MIDI keyboard plays a synth with `lead.play_from_midi()`, and `def on_midi_note(note, velocity, channel):` is called for every key: [MIDI](docs/sound.md#midi). `mic = use_microphone()` is your own voice, as a robot or a monster with `mic.voice = "robot"`, recorded with `take = record_sound(3)` and saved with `save_sound(take, "hello.wav")`: [Your voice](docs/sound.md#your-voice). One line, `sound_button()`, puts a small speaker in a corner that switches the sound off and on, and a demo can ask first with `ask_about_sound()`, "Play with sound" or "Play without sound": [A sound button, and asking first](docs/sound.md#a-sound-button-and-asking-first). Sound is new, and not yet in the Pyctures that `pip install pyctures` gives (0.2.0): it will be in the next release. With one more line a scene has dials, sliders and a piano keyboard on it, to play a synth and change it as it sounds: [Dials and a keyboard](docs/dials.md).
+There are ready-made game sounds, notes and tunes, and synths you shape yourself: [Sound and music](docs/sound.md). A MIDI keyboard plays a synth with `lead.play_from_midi()`, and `def on_midi_note(note, velocity, channel):` is called for every key: [MIDI](docs/sound.md#midi). `mic = use_microphone()` is your own voice, as a robot or a monster with `mic.voice = "robot"`, recorded with `take = record_sound(3)` and saved with `save_sound(take, "hello.wav")`: [Your voice](docs/sound.md#your-voice). `say("Hello")` makes the computer talk, with nothing to import or set up, and `mouth(x, y)` is a mouth that opens as it does: [Make it talk](docs/say.md). One line, `sound_button()`, puts a small speaker in a corner that switches the sound off and on, and a demo can ask first with `ask_about_sound()`, "Play with sound" or "Play without sound": [A sound button, and asking first](docs/sound.md#a-sound-button-and-asking-first). Sound is new, and not yet in the Pyctures that `pip install pyctures` gives (0.2.0): it will be in the next release. With one more line a scene has dials, sliders and a piano keyboard on it, to play a synth and change it as it sounds: [Dials and a keyboard](docs/dials.md).
 
 ```python
 from pyctures import *
@@ -355,6 +355,10 @@ In [`examples/`](examples), each with a comment at the top saying what it shows.
 | `hello.py`, `moving.py`, `follow.py`, `first_game.py` | The four small scenes at the top of this page |
 | `night_sky.py` | A whole picture from the plain drawing functions, with no `ctx` |
 | `ring.py` | Twelve circles in a ring |
+| `say_hello.py` | A face that talks when you click it: `say()` and `mouth()` |
+| `two_faces.py` | Two faces with different voices talk to each other: `speaker()`, `mouth(x, y, speaker=...)` |
+| `hook.py`, `kinetic_gallery.py` | Moving text for videos: the first six seconds of one, and every effect in turn |
+| `code_along_circle.py` | A code-along for videos: a circle typed in three stages, with what each stage draws beside the code |
 | `sound_catcher.py` | A game with sound effects: `play_sound` |
 | `tune.py` | Drums, a bass and a melody that go round, with lights in time |
 | `arpeggio_chords.py` | One voice playing chords, as a sound chip would |
@@ -371,6 +375,8 @@ pyctures run examples            # a list of them all
 ```
 
 ## Docs
+
+Words that move, for videos (`word_slam("Learn to code")`, `letter_wave`, `typewriter_text`, `count_up` and six more), lay themselves out for a wide frame or a tall one and keep inside the part of it that phones leave clear: see [Kinetic text](docs/kinetic-text.md). Nothing to import. A lesson for a video, code typed on one side and what it really draws on the other (`code_along(stages=stages, duration=12)`), is laid out the same way: see [Code-along](docs/code-along.md).
 
 Start with [Getting started](docs/getting-started.md), then [how a program is shaped](docs/program-shape.md), [drawing in 2D](docs/drawing-2d.md), [3D scenes](docs/3d.md), [colours](docs/colours.md), [saved values](docs/saved-values.md), [sound and music](docs/sound.md), [dials and a keyboard](docs/dials.md), and [tips](docs/tips.md). The [2D functions](docs/2d-functions.md) and [3D functions](docs/3d-functions.md) pages list everything, one line each. The [function index](docs/function-index.md) names every function by area, with a link to where it is explained. Seven tutorials are in [docs/tutorials](docs/tutorials).
 

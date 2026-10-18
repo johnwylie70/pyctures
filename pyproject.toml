@@ -51,7 +51,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-pyctures = ["web/*.js", "web/three/*", "web/synths/*", "web/dials/*", "web/scenes/*", "web/manners/*"]
+pyctures = ["web/*.js", "web/three/*", "web/synths/*", "web/dials/*", "web/scenes/*", "web/manners/*", "web/voice/*", "web/kinetic/*", "web/codealong/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

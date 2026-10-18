@@ -15,9 +15,12 @@ Every name a Pyctures program can use, by area, one line each. The link on each 
 | Files | yes | yes |
 | Databases (SQLite) | yes | yes |
 | Sound and music | with synths.js | yes, `from synths import *` |
+| Talking: `say()`, `speaker()`, `mouth()` | yes | yes, nothing to import |
 | Dials and a keyboard | with dials.js | yes, `from pydials import *` |
 | Sheet music | with notation.js | yes, `from pynotation import *` |
 | Effects | yes | yes, `from pyvisualfx import *` |
+| Kinetic text, for videos | yes | yes, nothing to import |
+| Code-along, for videos | yes | yes, nothing to import |
 | Image processing | Circuitry only | Circuitry only |
 
 This page is Pyctures's own index, in its own spellings. pictures.js has the same areas in JavaScript: [the pictures.js function index](https://www.circuitry.dev/docs/pictures/functions).
@@ -655,6 +658,21 @@ These come with `from synths import *` at the top of the scene. Explained in [So
 | `midi_input()`, `lead.midi_input()`, `midi_output()` | The MIDI device and channel as something a control is tied to: `select("device", midi_input(), "device")`, and `"channel"` |
 | `receive_midi(message)`, `stop_midi()` | Pretend a message arrived; finish with MIDI |
 
+## Talking
+
+Nothing to import: a file that calls `say(`, `speaker(`, `voices(`, `speaking(`, `voice_level(` or `mouth(` is given them. Explained in [Make it talk: say()](say.md).
+
+| Name | What it does |
+|---|---|
+| `say(text, voice=None, lang="en", speaker=None)` | The computer says it. Gives back how many seconds the line takes (measured when an app has a recording of it, else 2.5 words a second, never under 0.8). Free, on the device, no account; heard live but not recorded into a video |
+| `speaking(speaker=None)` | `True` while a line is being said (with a speaker, while that speaker's line is) |
+| `speaker(voice=None, pitch=1, rate=1, lang="en", name=None, like=None, fallback=None)` | A character for a conversation: a voice of its own (a voice's name, `system:Samantha`-style provider ids, `like={"gender", "age", "pitch", "rate"}`, `fallback=[...]`, or `"robot"`, `"high"`, `"deep"`, `"squeaky"`, `"slow"`, `"fast"`), `pitch` 0 to 2 and `rate` 0.1 to 4 (1 is normal). `bob.say(text)`, `bob.say_at(text)`, `bob.level()`, `bob.shape()` and `bob.speaking()`. Lines from speakers wait their turn, so they never overlap |
+| `say_at(text, voice=None, lang="en", speaker=None)` | Like `say`, giving `{"start", "duration", "end"}` in seconds from now: when the line begins (after the lines before it), how long, and when it ends |
+| `voices()` | The voices on offer, English first: `[{"name", "lang", "default", "source"}]`. Empty until the device has loaded its voices |
+| `voice_shape(speaker=None)` | The mouth now (a speaker's own, when given): `{"width", "height", "viseme"}`; `width` is 0 (round, "oo") to 1 (spread, "ee"), `height` is the level, `viseme` is `"closed"`, `"oo"`, `"oh"`, `"ah"`, `"mid"` or `"ee"` |
+| `voice_level(speaker=None)` | How loud the voice is right now, 0 (quiet) to 1 (loud), smoothed. A recorded line: the real loudness of its audio at that frame's time. The free voice: made up from the words, not true lip-sync |
+| `mouth(x, y, size=None, style="oval", color="black", speaker=None)` | Draws a mouth with its middle at `x, y`: a line when quiet, opening with the voice. `style` is `"oval"`, `"smile"` or `"robot"`; `size` is its width (a sixth of the smaller side of the scene if left out). `speaker` makes it open only while that speaker's line plays. Gives back `None` |
+
 ## Dials and a keyboard
 
 These come with `from pydials import *` at the top of the scene. Explained in [Dials and a keyboard](dials.md).
@@ -815,6 +833,38 @@ These come with `from pynotation import *` at the top of the scene, which brings
 |---|---|---|
 | `measure(name)` | Times a part of a frame: `with measure("physics"):`, shown in the measure box | [Debugging](finding-mistakes.md) |
 | `Event` | What a JavaScript event listener is handed: `canvas.addEventListener("click", on_click)` | [How a program is shaped](program-shape.md#callbacks) |
+
+## Kinetic text
+
+Moving words for videos, each drawn into the scene at the time it is given. Nothing to import. [Kinetic text](kinetic-text.md) explains them, with every option.
+
+| Name | What it does |
+|---|---|
+| `word_slam(text, ...)` | Words land one at a time, hard, with a shake |
+| `letter_wave(text, ...)` | Letters appear and ride a wave |
+| `letter_bounce(text, ...)` | Letters drop in and bounce |
+| `typewriter_text(text, ...)` | Typed out letter by letter, with a cursor |
+| `glitch_text(text, ...)` | Split into red and blue, with slices that jump |
+| `mask_reveal(text, ...)` | A wipe uncovers the text |
+| `scale_pop(text, ...)` | The `*starred*` words swell and settle |
+| `ticker_text(text, ...)` | One line scrolling along a strip |
+| `count_up("12,000+", ...)` | A number counting up |
+| `highlight_sweep(text, ...)` | A highlighter sweeps under the `*starred*` words |
+| `kinetic_text(kind, text, ...)` | Any of the above by a short name: `"slam"`, `"wave"`, `"bounce"`, `"type"`, `"glitch"`, `"reveal"`, `"pop"`, `"ticker"`, `"count"`, `"highlight"` |
+| `kinetic_effects()` | The short names `kinetic_text` takes, as a list |
+| `kinetic_time()` | The scene's seconds; `kinetic_time(5)` sets them |
+| `kinetic_safe()` | The safe area in pixels: `.left`, `.top`, `.right`, `.bottom`, `.width`, `.height` |
+| `house_style` | The palette, fonts, sizes and three voices every video shares |
+| `seeded_random(seed)` | A random function that gives the same numbers for the same seed |
+
+## Code-along
+
+Code typed on one side and what it really draws on the other, for a lesson in a video. Nothing to import. [Code-along](code-along.md) explains it, with every option.
+
+| Name | What it does |
+|---|---|
+| `code_along(stages=..., start=, duration=, layout=, ...)` | Code typed stage by stage, syntax coloured, with the changed lines lit, beside the preview of each stage running; a Python stage is run here, a JavaScript one by the page; gives back a dict with `progress`, `stage`, `phase`, `typed`, `preview` and `warnings` |
+| `code_along_stage_at(stages, t, ...)` | Which stage is being typed `t` seconds in, and how many characters are typed, with no drawing |
 
 ## Image processing
 

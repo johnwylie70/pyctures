@@ -1800,6 +1800,8 @@ def _call_frame_functions(dt):
 # with Scene in its brackets, or a call of scene(), go(), next_scene(), config() or section() (the last two because they are written at the top of a
 # file, before its first scene is). The page and `pyctures build` ask the
 # same question of the same text with the same words (pyctures.js LIBRARIES, pages.uses_library).
+_USES_KINETIC = re.compile(r"(?:^|[^.\w])(?:word_slam|letter_wave|letter_bounce|typewriter_text|glitch_text|mask_reveal|scale_pop|ticker_text|count_up|highlight_sweep|kinetic_\w+|code_along\w*|house_style|seeded_random)\b", re.M)
+_USES_CODEALONG = re.compile(r"(?:^|[^.\w])code_along\w*", re.M)
 _USES_SCENES = re.compile(r"(?:^|[^.\w])(?:Scene\b|(?:scene|go|next_scene|config|section)[ \t]*\()", re.M)
 
 
@@ -1866,6 +1868,15 @@ def start(source, info_json):
             _scenes_library().begin_run(ns, info)
         except ImportError:
             pass   # a page that did not bring the library: the file's own mention of a scene is then a name that is not there
+    if "say" in source or "mouth" in source or "speaking" in source or "voice_level" in source or "voice_shape" in source or "speaker" in source or "voices" in source:   # say(), mouth(): the voice
+        try: __import__("pysay").begin_run(ns, info, source)
+        except ImportError: pass
+    if _USES_KINETIC.search(source):   # kinetic text
+        try: __import__("pykinetic").begin_run(ns, info, source)
+        except ImportError: pass
+    if _USES_CODEALONG.search(source):   # the code-along
+        try: __import__("pycodealong").begin_run(ns, info, source)
+        except ImportError: pass
     if "sound" in source:   # the sound button
         try: __import__("pymanners").begin_run(ns, info, source)
         except ImportError: pass

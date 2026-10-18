@@ -13,7 +13,10 @@
     "./synths/*": "./synths/*",
     "./dials/*": "./dials/*",
     "./scenes/*": "./scenes/*",
-    "./manners/*": "./manners/*"
+    "./manners/*": "./manners/*",
+    "./voice/*": "./voice/*",
+    "./kinetic/*": "./kinetic/*",
+    "./codealong/*": "./codealong/*"
   },
   "files": [
     "pyctures.js",
@@ -23,6 +26,9 @@
     "dials/",
     "scenes/",
     "manners/",
+    "voice/",
+    "kinetic/",
+    "codealong/",
     "README.md",
     "LICENSE",
     "THIRD-PARTY-NOTICES"

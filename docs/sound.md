@@ -23,7 +23,7 @@ def draw():
 
 Run it as you run any scene (`pyctures run ball.py`), and click the picture once.
 
-Sound is new: it is in this repository and not yet in the Pyctures that `pip install pyctures` gives (0.2.0). It will be in the next release.
+Sound is new in Pyctures 0.3.0 (`pip install -U pyctures`).
 
 ## The first tap
 

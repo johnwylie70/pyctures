@@ -429,7 +429,7 @@ def test_scenes_are_a_library_that_only_a_file_naming_a_scene_is_given(tmp_path)
     assert "scenesKeeper(container" in with_scenes and "class _Stage" in with_scenes
     # A page with no scenes is the size it was: all of scenes but the few lines that ask for it is in the library.
     # (Under 200 kB, the limit for a page that uses no library: the keepers of the libraries a page may ask for are in every page.)
-    assert len(with_scenes) - len(without) > library and len(without) < 200_000
+    assert len(with_scenes) - len(without) > library and len(without) < 220_000  # was 200_000: see test_worker.py
     start("def draw():\n    ctx.fill_rect(0, 0, 1, 1)\n")
     assert pyctures.S.scenes is None and "Scene" not in pyctures.S.ns
 

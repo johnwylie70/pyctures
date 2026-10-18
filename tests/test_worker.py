@@ -257,7 +257,11 @@ def test_single_file_2d_is_small_and_runs_from_disk_and_http(browser, static_ser
     assert page.is_file() and page.name == "star_catcher.html"
     assert list(tmp_path.iterdir()) == [page]
     text = page.read_text()
-    assert "\"three\": {\"core\"" not in text and len(text) < 200_000
+    # 0.2.0 was 147 kB; the page's browser half (pyctures.js, 73 kB -> 128 kB) now carries the hooks
+    # for sound, dials, scenes, notation, effects, stepped recording, say, kinetic text and the
+    # code-along, the libraries themselves still fetched only when named. 208 kB at 0.3.0; limit
+    # raised from 200 kB to 220 kB.
+    assert "\"three\": {\"core\"" not in text and len(text) < 220_000
     assert "<script type=\"module\">" in text
     for url in (page.as_uri(), static_server(tmp_path) + page.name):
         w = Watched(browser, url)

@@ -262,7 +262,7 @@ def test_a_single_file_page_carries_sheet_music_only_for_a_scene_that_imports_it
         assert ('"notation": {"js"' in text) == (scene is tune)
         assert ('"synths": {"js"' in text) == (scene is tune)
     # A page with no sheet music is as small as it was: under 200 kB.
-    assert sizes["plain"] < 200_000, sizes
+    assert sizes["plain"] < 220_000  # was 200_000: see test_worker.py (page core grew, 206 kB at 0.3.0), sizes
     print("single-file page: %d bytes without sheet music, %d with it and the sound" % (sizes["plain"], sizes["tune"]))
 
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyctures"
-version = "0.2.0"
+version = "0.3.0"
 description = "Python 2D and 3D graphics, drawn in your web browser. Games, animations, charts and 3D scenes."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -51,7 +51,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-pyctures = ["web/*.js", "web/three/*", "web/synths/*", "web/dials/*", "web/scenes/*", "web/manners/*", "web/voice/*", "web/kinetic/*", "web/codealong/*"]
+pyctures = ["web/*.js", "web/three/*", "web/synths/*", "web/dials/*", "web/scenes/*", "web/manners/*", "web/voice/*", "web/kinetic/*", "web/codealong/*", "web/notation/*", "web/visualfx/*", "web/stepped/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

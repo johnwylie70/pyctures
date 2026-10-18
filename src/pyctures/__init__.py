@@ -52,7 +52,7 @@ once per frame, and ``stop()``. Each returns a JSON reply:
 """
 import sys, io, os, re, json, time, math, traceback, threading, types, linecache
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 VERSION = "10"
 USER_FILE = "main.py"

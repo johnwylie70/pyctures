@@ -45,7 +45,7 @@ pyctures build my-page/ -o site/
 That copies everything in `my-page/` (your HTML, your `.py` files, pictures) into `site/` and adds the `pyctures/` folder. Or load the browser half from a CDN instead, once the npm package is published (replace the version with the one you want):
 
 ```html
-<script type="module" src="https://cdn.jsdelivr.net/npm/pyctures@0.2.0/pyctures.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/pyctures@0.3.0/pyctures.js"></script>
 ```
 
 ### What a scene's box does

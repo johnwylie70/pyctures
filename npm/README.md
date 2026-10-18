@@ -4,7 +4,7 @@ The browser half of [Pyctures](https://github.com/johnwylie70/pyctures) ([try it
 
 ```html
 <div data-pyctures-src="scene.py"></div>
-<script type="module" src="https://cdn.jsdelivr.net/npm/pyctures@0.2.0/pyctures.js"></script>
+<script type="module" src="https://cdn.jsdelivr.net/npm/pyctures@0.3.0/pyctures.js"></script>
 ```
 
 `scene.py` is an ordinary Pyctures scene:
